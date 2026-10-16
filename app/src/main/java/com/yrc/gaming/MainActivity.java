@@ -56,6 +56,10 @@ public class MainActivity extends Activity {
     button("تفعيل شاشة PC المصغّرة 16:9",()->new AlertDialog.Builder(this).setTitle("تصغير مساحة العرض إلى 16:9").setMessage("هذا يغيّر دقة عرض نظام الهاتف مؤقتًا وقد يسبب أشرطة سوداء أو تغيير أماكن اللمس. لا يغيّر كاميرا ببجي الحقيقية. هل تريد التطبيق؟").setNegativeButton("إلغاء",null).setPositiveButton("تفعيل",(d,w)->run(()->applyPcScreen())).show());
     button("استعادة الشاشة الأصلية",()->run(()->restorePcScreen()));
     button("إرشادات زاوية كاميرا TPP",()->showPcViewGuide());
+    title("خيارات متقدمة قابلة للتطبيق");
+    button("طلب شاشة 144Hz والتحقق من استجابة XOS",()->run(()->request144()));
+    button("تخفيف الحمل الرسومي لببجي 90% (تجريبي)",()->new AlertDialog.Builder(this).setTitle("تقليل حمل GPU").setMessage("يطلب من Android Game Mode عرض اللعبة بدقة رسم 90% إن كان مدعومًا، لتحسين ثبات الفريمات مقابل انخفاض طفيف في وضوح الصورة. لا يغير دقة الهاتف أو ملفات اللعبة. قد ترفضه PUBG أو XOS.").setNegativeButton("إلغاء",null).setPositiveButton("تطبيق",(d,w)->run(()->applyDownscale())).show());
+    button("إلغاء تخفيف الحمل الرسومي",()->run(()->resetDownscale()));
     title("التحكم");
     button("تطبيق التحسينات وتشغيل ببجي",()->{final int selected=profiles.getCheckedRadioButtonId();final boolean net=network.isChecked(),vis=visual.isChecked(),input=touch.isChecked(),guide=pcView.isChecked();run(()->applyAndLaunch(selected,net,vis,input,guide));});
     button("استعادة إعدادات النظام",()->run(()->restore()));
@@ -181,6 +185,35 @@ public class MainActivity extends Activity {
       message("تمت استعادة الشاشة: "+root("wm size"));
     }catch(Exception e){message("تعذرت الاستعادة: "+e.getMessage());}
   }
+  private void request144(){
+    try{
+      root("id");
+      String modes=root("dumpsys display | grep -E '144\\.0|144Hz' | head -n 4");
+      if(modes.isEmpty()){message("لم يظهر وضع 144Hz في قراءة النظام. لم نغير الإعدادات.");return;}
+      setSetting("system","peak_refresh_rate","144.0");
+      setSetting("system","min_refresh_rate","120.0");
+      String peak=root("settings get system peak_refresh_rate");
+      String min=root("settings get system min_refresh_rate");
+      message("تم طلب 144Hz للشاشة. إعدادات النظام الآن: peak="+peak+" / min="+min+". هذه ليست قراءة FPS داخل PUBG، وقد يغيّرها XOS.");
+    }catch(Exception e){message("XOS لم يقبل طلب 144Hz أو تعذر تطبيقه: "+e.getMessage());}
+  }
+  private void applyDownscale(){
+    String game=pkg();
+    if(game==null){message("لم يتم العثور على ببجي");return;}
+    try{
+      root("id");
+      String help=root("cmd game help");
+      if(!help.contains("--downscale")||!help.contains("set")){message("نسخة Android Game Mode لا تدعم تغيير دقة الرسم بهذا الأمر.");return;}
+      String result=root("cmd game set --mode performance --downscale 0.9 "+game);
+      String modes=root("cmd game list-configs "+game);
+      message("تم إرسال طلب دقة رسم 90% إلى Android. "+result+"\\n"+modes+"\\nأعد تشغيل PUBG لتطبيق التغيير. إذا لم يظهر 0.9 فقد يكون النظام رفضه.");
+    }catch(Exception e){message("لم يُطبّق تخفيف الرسم: "+e.getMessage());}
+  }
+  private void resetDownscale(){
+    String game=pkg();if(game==null){message("لم يتم العثور على ببجي");return;}
+    try{root("cmd game reset --mode performance "+game);message("تم إرسال أمر استعادة إعدادات رسم اللعبة الافتراضية. أعد تشغيل ببجي.");}
+    catch(Exception e){message("تعذرت الاستعادة: "+e.getMessage());}
+  }
   private void showPcViewGuide(){
     new AlertDialog.Builder(this).setTitle("منظور TPP الواسع")
       .setMessage("لمنظور قريب من الكمبيوتر دون تصغير الشاشة:\n\n١. افتح إعدادات ببجي.\n٢. ابحث عن «منظور كاميرا الشخص الثالث» أو TPP Camera View (قد يختلف مكانه حسب الإصدار).\n٣. ارفع زاوية الرؤية إلى أعلى قيمة تسمح بها اللعبة.\n٤. للأداء اختر الرسومات السلسة وأعلى معدل إطارات رسمي متاح (120 عندك).\n\nلا يستطيع التطبيق تجاوز الحد الذي تفرضه ببجي على الكاميرا أو الإطارات.")
@@ -196,7 +229,7 @@ public class MainActivity extends Activity {
   private void restore(){
     ArrayList<String> result=new ArrayList<>();
     try{root("id");}catch(Exception e){message("تحتاج صلاحية الروت للاستعادة");return;}
-    for(String[] entry:new String[][]{{"global","low_power"},{"global","wifi_sleep_policy"}}){
+    for(String[] entry:new String[][]{{"global","low_power"},{"global","wifi_sleep_policy"},{"system","peak_refresh_rate"},{"system","min_refresh_rate"}}){
       String table=entry[0],key=entry[1],pref="old_"+table+"_"+key;
       if(!prefs.contains(pref))continue;
       String old=prefs.getString(pref,"null");
