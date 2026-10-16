@@ -74,7 +74,7 @@ public class MainActivity extends Activity {
   private void run(Runnable r){executor.execute(r);}
   private void message(String msg){runOnUiThread(()->status.setText(msg));}
   private String root(String cmd)throws Exception{
-    Process p=new ProcessBuilder("su","-c",cmd).redirectErrorStream(true).start();
+    java.lang.Process p=new ProcessBuilder("su","-c",cmd).redirectErrorStream(true).start();
     ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] buf=new byte[1024];int n;
     try(InputStream in=p.getInputStream()){while((n=in.read(buf))!=-1){if(out.size()>16000)break;out.write(buf,0,n);}}
     int code=p.waitFor();String text=out.toString("UTF-8").trim();
