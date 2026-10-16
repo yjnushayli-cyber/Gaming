@@ -67,6 +67,7 @@ public class MainActivity extends Activity {
     label("اختبار مباشر للاتصال بين هاتفك والراوتر. يكشف فقد الحزم وتذبذب الاستجابة داخل شبكة المنزل؛ لا يقيس بنق سيرفر ببجي.");
     button("اختبار Wi-Fi والراوتر (10 حزم)",()->run(()->testWifi()));
     button("فتح إعدادات Wi-Fi",()->{try{startActivity(new Intent(android.provider.Settings.ACTION_WIFI_SETTINGS));}catch(Exception e){message("تعذر فتح Wi-Fi");}});
+    button("إيقاف وضع الأداء القوي واستعادة الإعدادات",()->run(()->stopStrongMode()));
     title("التحكم");
     button("تطبيق التحسينات وتشغيل ببجي",()->{final int selected=profiles.getCheckedRadioButtonId();final boolean net=network.isChecked(),vis=visual.isChecked(),input=touch.isChecked(),guide=pcView.isChecked();run(()->applyAndLaunch(selected,net,vis,input,guide));});
     button("استعادة إعدادات النظام",()->run(()->restore()));
@@ -234,11 +235,40 @@ public class MainActivity extends Activity {
     String game=pkg();if(game==null){message("ببجي غير موجودة");return;}
     ArrayList<String> logs=new ArrayList<>();
     try{root("id");}catch(Exception e){message("صلاحية الروت غير متاحة");return;}
-    try{setSetting("global","low_power","0");logs.add("توفير الطاقة: معطل");}catch(Exception e){logs.add("توفير الطاقة: "+e.getMessage());}
-    try{setSetting("system","peak_refresh_rate","144.0");logs.add("144Hz: تم قبول الطلب في settings (ليس FPS اللعبة)");}catch(Exception e){logs.add("144Hz: "+e.getMessage());}
-    try{setSetting("system","min_refresh_rate","120.0");logs.add("الحد الأدنى: تم قبول الطلب");}catch(Exception e){logs.add("الحد الأدنى: XOS رفض الطلب");}
-    try{String out=root("cmd game mode performance "+game);logs.add(looksLikeHelp(out)?"Game Mode: غير مدعوم":"Game Mode: أُرسل طلب performance");}catch(Exception e){logs.add("Game Mode: غير متاح");}
-    try{String out=root("cmd game set --mode performance --fps 120 "+game);logs.add(looksLikeHelp(out)?"120FPS: الأمر غير مدعوم":"120FPS: أُرسل الطلب، دون ضمان قبول اللعبة");}catch(Exception e){logs.add("120FPS: لم يُقبل الأمر");}
+    if(thermal()>=PowerManager.THERMAL_STATUS_SEVERE||temperature()>=420){
+      message("الحرارة مرتفعة؛ لا يمكن تفعيل وضع الأداء القوي الآن.");return;
+    }
+    try{setSetting("global","low_power","0");logs.add("توفير الطاقة: تم تعطيله");}
+    catch(Exception e){logs.add("توفير الطاقة: لم يتغير");}
+    try{setSetting("system","peak_refresh_rate","144.0");logs.add("144Hz: قُبلت القيمة في الإعدادات");}
+    catch(Exception e){logs.add("144Hz: رفض XOS الطلب");}
+    try{setSetting("system","min_refresh_rate","120.0");logs.add("الحد الأدنى: قُبلت القيمة في الإعدادات");}
+    catch(Exception e){logs.add("الحد الأدنى: رفض XOS الطلب");}
+    try{String out=root("cmd game mode performance "+game);logs.add(looksLikeHelp(out)?"Game Mode: غير مدعوم":"Game Mode: أُرسل طلب الأداء");}
+    catch(Exception e){logs.add("Game Mode: تعذر التفعيل");}
+    try{String out=root("cmd game set --mode performance --fps 120 "+game);logs.add(looksLikeHelp(out)?"120FPS: الأمر غير مدعوم":"120FPS: أُرسل الطلب للنظام");}
+    catch(Exception e){logs.add("120FPS: تعذر إرسال الطلب");}
+    prefs.edit().putBoolean("strong_mode",true).commit();
+    message(android.text.TextUtils.join(String.valueOf((char)10),logs)+"\nهذه طلبات للنظام، وليست قراءة FPS الفعلية.");
+  }
+  private void stopStrongMode(){
+    ArrayList<String> logs=new ArrayList<>();
+    try{root("id");}catch(Exception e){message("صلاحية الروت غير متاحة");return;}
+    for(String[] entry:new String[][]{{"global","low_power"},{"system","peak_refresh_rate"},{"system","min_refresh_rate"}}){
+      String table=entry[0],key=entry[1],pref="old_"+table+"_"+key;
+      if(!prefs.contains(pref))continue;
+      try{
+        String old=prefs.getString(pref,"null");
+        if("null".equals(old))root("settings delete "+table+" "+key);
+        else root("settings put "+table+" "+key+" "+old);
+        prefs.edit().remove(pref).commit();logs.add(key+": استُعيد");
+      }catch(Exception e){logs.add(key+": تعذرت الاستعادة");}
+    }
+    String game=pkg();
+    if(game!=null)try{root("cmd game reset "+game);logs.add("Game Mode: أُرسل أمر الاستعادة");}
+    catch(Exception e){logs.add("Game Mode: تعذرت الاستعادة");}
+    try{root("cmd power set-fixed-performance-mode-enabled false");}catch(Exception ignored){}
+    prefs.edit().putBoolean("strong_mode",false).commit();
     message(android.text.TextUtils.join(String.valueOf((char)10),logs));
   }
   private void request144(){
