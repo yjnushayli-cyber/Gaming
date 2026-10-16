@@ -16,7 +16,7 @@ public class MainActivity extends Activity {
   private TextView status;
   private LinearLayout layout;
   private RadioGroup profiles;
-  private CheckBox network, visual, touch;
+  private CheckBox network, visual, touch, pcView;
   private final int BG=Color.rgb(12,18,29), ACCENT=Color.rgb(56,207,174);
   private final String[] PACKAGES={"com.tencent.ig","com.pubg.imobile","com.vng.pubgmobile","com.rekoo.pubgm"};
 
@@ -50,8 +50,12 @@ public class MainActivity extends Activity {
     network=check("الشبكة: إبقاء Wi-Fi نشطًا أثناء اتصال الجهاز به",true);
     visual=check("العرض: إلغاء توفير الطاقة وطلب وضع الأداء",true);
     touch=check("الاستجابة: منع إطفاء الشاشة أثناء فتح التطبيق فقط",false);
+    title("منظور الكمبيوتر (TPP)");
+    pcView=check("فتح إرشادات المنظور الواسع قبل تشغيل ببجي",true);
+    label("المنظور الواسع الحقيقي يتحكم فيه إعداد كاميرا TPP داخل ببجي. هذا الخيار لا يغيّر دقة الشاشة ولا يعدّل ملفات اللعبة.");
+    button("ضبط منظور TPP الواسع",()->showPcViewGuide());
     title("التحكم");
-    button("تطبيق التحسينات وتشغيل ببجي",()->run(()->applyAndLaunch()));
+    button("تطبيق التحسينات وتشغيل ببجي",()->{final int selected=profiles.getCheckedRadioButtonId();final boolean net=network.isChecked(),vis=visual.isChecked(),input=touch.isChecked(),guide=pcView.isChecked();run(()->applyAndLaunch(selected,net,vis,input,guide));});
     button("استعادة إعدادات النظام",()->run(()->restore()));
     button("فتح إعدادات الرسومات في ببجي",()->launchGame());
     button("فتح إعدادات الشاشة",()->{try{startActivity(new Intent(android.provider.Settings.ACTION_DISPLAY_SETTINGS));}catch(Exception e){message("تعذر فتح الإعدادات");}});
@@ -103,15 +107,13 @@ public class MainActivity extends Activity {
     String actual=root("settings get "+table+" "+key);
     if(!value.equals(actual))throw new IOException("النظام لم يقبل "+key+" (القيمة: "+actual+")");
   }
-  private void applyAndLaunch(){
+  private void applyAndLaunch(int profile,boolean net,boolean vis,boolean input,boolean guide){
     String game=pkg();
     if(game==null){message("ببجي غير موجودة أو غير ظاهرة للتطبيق.");return;}
     int t=temperature(),th=thermal();
     if((t>=420)||(th>=PowerManager.THERMAL_STATUS_SEVERE)){
       message("الحرارة مرتفعة؛ لم يُفعّل وضع الأداء. حرارة البطارية: "+(t/10f)+"°C");return;
     }
-    int profile=profiles.getCheckedRadioButtonId();
-    boolean net=network.isChecked(),vis=visual.isChecked(),input=touch.isChecked();
     prefs.edit().putInt("profile",profile)
       .putBoolean("check_"+network.getText(),net)
       .putBoolean("check_"+visual.getText(),vis)
@@ -140,8 +142,7 @@ public class MainActivity extends Activity {
         android.net.Network active=cm.getActiveNetwork();
         android.net.NetworkCapabilities caps=cm.getNetworkCapabilities(active);
         if(caps!=null&&caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)){
-          setSetting("global","wifi_sleep_policy","2");
-          result.add("سياسة بقاء Wi-Fi: تم طلب تفعيلها (قد يتجاهلها أندرويد الحديث)");
+          result.add("الشبكة: Wi-Fi متصل. لا يمكن فرض بنق ثابت أو منع تبديل الشبكة بواجهة عامة موثوقة.");
         }else result.add("الشبكة: الاتصال الحالي ليس Wi-Fi؛ لم نغيّر الشبكة");
       }catch(Exception e){result.add("إعداد Wi-Fi غير متاح: "+e.getMessage());}
     }
@@ -149,7 +150,13 @@ public class MainActivity extends Activity {
     else runOnUiThread(()->getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON));
     result.add("الرسومات: دون تغيير ملفات اللعبة أو دقة الشاشة");
     message(android.text.TextUtils.join("\n",result));
-    runOnUiThread(()->launchGame());
+    runOnUiThread(()->{if(guide)showPcViewGuide();else launchGame();});
+  }
+  private void showPcViewGuide(){
+    new AlertDialog.Builder(this).setTitle("منظور TPP الواسع")
+      .setMessage("لمنظور قريب من الكمبيوتر دون تصغير الشاشة:\n\n١. افتح إعدادات ببجي.\n٢. ابحث عن «منظور كاميرا الشخص الثالث» أو TPP Camera View (قد يختلف مكانه حسب الإصدار).\n٣. ارفع زاوية الرؤية إلى أعلى قيمة تسمح بها اللعبة.\n٤. للأداء اختر الرسومات السلسة وأعلى معدل إطارات رسمي متاح (120 عندك).\n\nلا يستطيع التطبيق تجاوز الحد الذي تفرضه ببجي على الكاميرا أو الإطارات.")
+      .setNegativeButton("إغلاق",null)
+      .setPositiveButton("فتح ببجي",(d,w)->launchGame()).show();
   }
   private void launchGame(){
     String game=pkg();
