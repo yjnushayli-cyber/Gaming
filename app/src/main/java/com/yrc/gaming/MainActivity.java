@@ -60,6 +60,10 @@ public class MainActivity extends Activity {
     button("طلب شاشة 144Hz والتحقق من استجابة XOS",()->run(()->request144()));
     button("تخفيف الحمل الرسومي لببجي 90% (تجريبي)",()->new AlertDialog.Builder(this).setTitle("تقليل حمل GPU").setMessage("يطلب من Android Game Mode عرض اللعبة بدقة رسم 90% إن كان مدعومًا، لتحسين ثبات الفريمات مقابل انخفاض طفيف في وضوح الصورة. لا يغير دقة الهاتف أو ملفات اللعبة. قد ترفضه PUBG أو XOS.").setNegativeButton("إلغاء",null).setPositiveButton("تطبيق",(d,w)->run(()->applyDownscale())).show());
     button("إلغاء تخفيف الحمل الرسومي",()->run(()->resetDownscale()));
+    title("Wi-Fi | ثبات البنق");
+    label("اختبار مباشر للاتصال بين هاتفك والراوتر. يكشف فقد الحزم وتذبذب الاستجابة داخل شبكة المنزل؛ لا يقيس بنق سيرفر ببجي.");
+    button("اختبار Wi-Fi والراوتر (10 حزم)",()->run(()->testWifi()));
+    button("فتح إعدادات Wi-Fi",()->{try{startActivity(new Intent(android.provider.Settings.ACTION_WIFI_SETTINGS));}catch(Exception e){message("تعذر فتح Wi-Fi");}});
     title("التحكم");
     button("تطبيق التحسينات وتشغيل ببجي",()->{final int selected=profiles.getCheckedRadioButtonId();final boolean net=network.isChecked(),vis=visual.isChecked(),input=touch.isChecked(),guide=pcView.isChecked();run(()->applyAndLaunch(selected,net,vis,input,guide));});
     button("استعادة إعدادات النظام",()->run(()->restore()));
@@ -184,6 +188,44 @@ public class MainActivity extends Activity {
       prefs.edit().remove("pc_old_size").commit();
       message("تمت استعادة الشاشة: "+root("wm size"));
     }catch(Exception e){message("تعذرت الاستعادة: "+e.getMessage());}
+  }
+  private void testWifi(){
+    try{
+      android.net.ConnectivityManager cm=(android.net.ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
+      android.net.Network n=cm.getActiveNetwork();
+      android.net.NetworkCapabilities cap=cm.getNetworkCapabilities(n);
+      if(cap==null||!cap.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)){
+        message("الاتصال النشط ليس Wi-Fi. اتصل بالشبكة ثم أعد الاختبار.");return;
+      }
+      android.net.LinkProperties lp=cm.getLinkProperties(n);
+      java.net.InetAddress gateway=null;
+      if(lp!=null)for(android.net.RouteInfo route:lp.getRoutes()){
+        if(route.isDefaultRoute()&&route.getGateway()!=null){gateway=route.getGateway();break;}
+      }
+      if(gateway==null){message("تعذر اكتشاف عنوان الراوتر تلقائيًا.");return;}
+      String ip=gateway.getHostAddress();
+      if(!ip.matches("[0-9a-fA-F:.%]+")){message("عنوان راوتر غير متوقع.");return;}
+      message("جاري قياس فقد الحزم والتذبذب مع الراوتر: "+ip+" ...");
+      java.lang.Process p=new ProcessBuilder("ping","-n","-c","10","-i","0.3","-W","1",ip).redirectErrorStream(true).start();
+      ByteArrayOutputStream out=new ByteArrayOutputStream();
+      byte[] buf=new byte[2048];int count;
+      try(InputStream in=p.getInputStream()){while((count=in.read(buf))!=-1){out.write(buf,0,count);if(out.size()>12000)break;}}
+      p.waitFor();
+      String raw=out.toString("UTF-8");
+      java.util.regex.Matcher loss=java.util.regex.Pattern.compile("([0-9]+(?:\\.[0-9]+)?)% packet loss").matcher(raw);
+      java.util.regex.Matcher times=java.util.regex.Pattern.compile("time[=<]([0-9]+(?:\\.[0-9]+)?)\\s*ms").matcher(raw);
+      ArrayList<Double> vals=new ArrayList<>();
+      while(times.find())vals.add(Double.parseDouble(times.group(1)));
+      if(!loss.find()||vals.isEmpty()){message("فشل اختبار الراوتر؛ قد يكون ICMP محظورًا. النتيجة لا تثبت وجود مشكلة بالإنترنت. "+raw.substring(0,Math.min(400,raw.length())));return;}
+      double sum=0,jitter=0,max=0;
+      for(int i=0;i<vals.size();i++){double v=vals.get(i);sum+=v;max=Math.max(max,v);if(i>0)jitter+=Math.abs(v-vals.get(i-1));}
+      double avg=sum/vals.size();jitter=vals.size()>1?jitter/(vals.size()-1):0;
+      String report=String.format(java.util.Locale.US,"Wi-Fi → الراوتر %s\\nفقد الحزم: %s%%\\nمتوسط الاستجابة: %.1f ms\\nأعلى استجابة: %.1f ms\\nالتذبذب التقريبي: %.1f ms\\n",ip,loss.group(1),avg,max,jitter);
+      double lost=Double.parseDouble(loss.group(1));
+      if(lost>0||jitter>15||max>80)report+="النتيجة: تذبذب محلي محتمل؛ جرّب 5GHz والاقتراب من الراوتر وإيقاف التحميلات.";
+      else report+="الاتصال بالراوتر مستقر في هذه العينة؛ قد يكون تذبذب PUBG خارج الشبكة المحلية.";
+      message(report);
+    }catch(Exception e){message("تعذر اختبار Wi-Fi: "+e.getMessage());}
   }
   private void request144(){
     try{
