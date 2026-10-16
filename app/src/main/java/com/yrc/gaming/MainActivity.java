@@ -60,6 +60,8 @@ public class MainActivity extends Activity {
     button("طلب شاشة 144Hz والتحقق من استجابة XOS",()->run(()->request144()));
     button("تخفيف الحمل الرسومي لببجي 90% (تجريبي)",()->new AlertDialog.Builder(this).setTitle("تقليل حمل GPU").setMessage("يطلب من Android Game Mode عرض اللعبة بدقة رسم 90% إن كان مدعومًا، لتحسين ثبات الفريمات مقابل انخفاض طفيف في وضوح الصورة. لا يغير دقة الهاتف أو ملفات اللعبة. قد ترفضه PUBG أو XOS.").setNegativeButton("إلغاء",null).setPositiveButton("تطبيق",(d,w)->run(()->applyDownscale())).show());
     button("إلغاء تخفيف الحمل الرسومي",()->run(()->resetDownscale()));
+    button("طلب 120FPS من Game Mode (تجريبي)",()->run(()->requestGameFps(120)));
+    button("إلغاء طلب FPS المخصص",()->run(()->requestGameFps(0)));
     title("Wi-Fi | ثبات البنق");
     label("اختبار مباشر للاتصال بين هاتفك والراوتر. يكشف فقد الحزم وتذبذب الاستجابة داخل شبكة المنزل؛ لا يقيس بنق سيرفر ببجي.");
     button("اختبار Wi-Fi والراوتر (10 حزم)",()->run(()->testWifi()));
@@ -233,11 +235,27 @@ public class MainActivity extends Activity {
       String modes=root("dumpsys display | grep -E '144\\.0|144Hz' | head -n 4");
       if(modes.isEmpty()){message("لم يظهر وضع 144Hz في قراءة النظام. لم نغير الإعدادات.");return;}
       setSetting("system","peak_refresh_rate","144.0");
-      setSetting("system","min_refresh_rate","120.0");
+      try{setSetting("system","min_refresh_rate","120.0");}catch(Exception ignored){}
       String peak=root("settings get system peak_refresh_rate");
       String min=root("settings get system min_refresh_rate");
-      message("تم طلب 144Hz للشاشة. إعدادات النظام الآن: peak="+peak+" / min="+min+". هذه ليست قراءة FPS داخل PUBG، وقد يغيّرها XOS.");
+      message("طلب الشاشة: 144Hz.\npeak="+peak+" / min="+min+"\nإذا أعاد XOS القيمة إلى 60 فهذا قيد بالنظام، وليس 144FPS داخل PUBG.");
     }catch(Exception e){message("XOS لم يقبل طلب 144Hz أو تعذر تطبيقه: "+e.getMessage());}
+  }
+  private void requestGameFps(int fps){
+    String game=pkg();if(game==null){message("لم يتم العثور على ببجي");return;}
+    try{
+      String out=root("cmd game set --mode performance --fps "+fps+" "+game);
+      if(looksLikeHelp(out)){message("أمر FPS غير مدعوم على هذا الإصدار؛ لم يتم تأكيد تطبيقه.");return;}
+      String config=root("cmd game list-configs "+game);
+      message("تم إرسال طلب "+fps+"FPS إلى Game Mode.\\n"+brief(config)+"\\nهذا ليس قياس FPS داخل اللعبة، وقد تتجاهل ببجي الطلب.");
+    }catch(Exception e){message("فشل طلب FPS: "+e.getMessage());}
+  }
+  private boolean looksLikeHelp(String out){
+    return out!=null&&(out.contains("Intervention configs consists of")||out.contains("Set app to run in the specified game mode")||out.contains("Usage:")||out.contains("Unknown option"));
+  }
+  private String brief(String out){
+    if(out==null)return "";
+    return out.length()>650?out.substring(0,650)+"…":out;
   }
   private void applyDownscale(){
     String game=pkg();
@@ -248,7 +266,7 @@ public class MainActivity extends Activity {
       if(!help.contains("--downscale")||!help.contains("set")){message("نسخة Android Game Mode لا تدعم تغيير دقة الرسم بهذا الأمر.");return;}
       String result=root("cmd game set --mode performance --downscale 0.9 "+game);
       String modes=root("cmd game list-configs "+game);
-      message("تم إرسال طلب دقة رسم 90% إلى Android. "+result+"\\n"+modes+"\\nأعد تشغيل PUBG لتطبيق التغيير. إذا لم يظهر 0.9 فقد يكون النظام رفضه.");
+      message("تم إرسال طلب دقة رسم 90% إلى Android. "+result+"\n"+brief(modes)+"\nأعد تشغيل PUBG لتطبيق التغيير.");
     }catch(Exception e){message("لم يُطبّق تخفيف الرسم: "+e.getMessage());}
   }
   private void resetDownscale(){
