@@ -52,8 +52,10 @@ public class MainActivity extends Activity {
     touch=check("الاستجابة: منع إطفاء الشاشة أثناء فتح التطبيق فقط",false);
     title("منظور الكمبيوتر (TPP)");
     pcView=check("فتح إرشادات المنظور الواسع قبل تشغيل ببجي",true);
-    label("المنظور الواسع الحقيقي يتحكم فيه إعداد كاميرا TPP داخل ببجي. هذا الخيار لا يغيّر دقة الشاشة ولا يعدّل ملفات اللعبة.");
-    button("ضبط منظور TPP الواسع",()->showPcViewGuide());
+    label("وضع PC المصغّر القديم يغيّر مساحة عرض أندرويد إلى 16:9. يمكنك استعادة دقة 1224×2720 الأصلية بضغطة زر. لا يغيّر FOV الحقيقي للعبة.");
+    button("تفعيل شاشة PC المصغّرة 16:9",()->new AlertDialog.Builder(this).setTitle("تصغير مساحة العرض إلى 16:9").setMessage("هذا يغيّر دقة عرض نظام الهاتف مؤقتًا وقد يسبب أشرطة سوداء أو تغيير أماكن اللمس. لا يغيّر كاميرا ببجي الحقيقية. هل تريد التطبيق؟").setNegativeButton("إلغاء",null).setPositiveButton("تفعيل",(d,w)->run(()->applyPcScreen())).show());
+    button("استعادة الشاشة الأصلية",()->run(()->restorePcScreen()));
+    button("إرشادات زاوية كاميرا TPP",()->showPcViewGuide());
     title("التحكم");
     button("تطبيق التحسينات وتشغيل ببجي",()->{final int selected=profiles.getCheckedRadioButtonId();final boolean net=network.isChecked(),vis=visual.isChecked(),input=touch.isChecked(),guide=pcView.isChecked();run(()->applyAndLaunch(selected,net,vis,input,guide));});
     button("استعادة إعدادات النظام",()->run(()->restore()));
@@ -148,9 +150,36 @@ public class MainActivity extends Activity {
     }
     if(input){runOnUiThread(()->getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON));result.add("إبقاء الشاشة نشطة أثناء فتح YRC");}
     else runOnUiThread(()->getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON));
-    result.add("الرسومات: دون تغيير ملفات اللعبة أو دقة الشاشة");
+    result.add("الرسومات: دون تعديل ملفات اللعبة. شاشة 16:9 تُفعّل من زر مستقل.");
     message(android.text.TextUtils.join("\n",result));
-    runOnUiThread(()->{if(guide)showPcViewGuide();else launchGame();});
+    runOnUiThread(()->launchGame());
+  }
+  private void applyPcScreen(){
+    try{
+      String current=root("wm size");
+      String physical=null;
+      for(String line:current.split("\\n"))if(line.startsWith("Physical size:"))physical=line.substring(14).trim();
+      if(physical==null||!physical.matches("[0-9]+x[0-9]+"))throw new IOException("تعذر معرفة الدقة الأصلية: "+current);
+      String[] dims=physical.split("x");
+      int shortSide=Math.min(Integer.parseInt(dims[0]),Integer.parseInt(dims[1]));
+      int longSide=(int)Math.round(shortSide*16.0/9.0);
+      longSide-=longSide%2;
+      if(!prefs.contains("pc_old_size"))prefs.edit().putString("pc_old_size",current).commit();
+      root("wm size "+shortSide+"x"+longSide);
+      message("تم تطبيق شاشة PC 16:9: "+root("wm size")+"\\nللرجوع اضغط «استعادة الشاشة الأصلية».");
+    }catch(Exception e){message("تعذر تفعيل شاشة PC: "+e.getMessage());}
+  }
+  private void restorePcScreen(){
+    try{
+      String old=prefs.getString("pc_old_size","");
+      if(old.isEmpty()){message("لا يوجد مقاس سابق محفوظ. لم نغيّر الشاشة.");return;}
+      String override=null;
+      for(String line:old.split("\\n"))if(line.startsWith("Override size:"))override=line.substring(14).trim();
+      if(override!=null&&override.matches("[0-9]+x[0-9]+"))root("wm size "+override);
+      else root("wm size reset");
+      prefs.edit().remove("pc_old_size").commit();
+      message("تمت استعادة الشاشة: "+root("wm size"));
+    }catch(Exception e){message("تعذرت الاستعادة: "+e.getMessage());}
   }
   private void showPcViewGuide(){
     new AlertDialog.Builder(this).setTitle("منظور TPP الواسع")
