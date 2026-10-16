@@ -6,7 +6,7 @@ public class MainActivity extends Activity {
  LinearLayout layout; TextView status; ExecutorService worker=Executors.newSingleThreadExecutor();
  final String[] keys={"peak_refresh_rate","min_refresh_rate","low_power"};
  final String[] tables={"system","system","global"};
- final String[] labels={"Request 144Hz Display","Keep Refresh Rate High (system may override)","Disable Battery Saver"};
+ final String[] labels={"Request 144Hz Display (legacy)","Keep Refresh Rate High (legacy)","Disable Battery Saver"};
  final String[] desired={"144.0","144.0","0"};
  boolean syncing=false; Switch[] switches=new Switch[3];
  android.content.SharedPreferences prefs;
@@ -16,19 +16,20 @@ public class MainActivity extends Activity {
  public void onCreate(Bundle b){super.onCreate(b);prefs=getSharedPreferences("settings",0);layout=new LinearLayout(this);layout.setOrientation(1);layout.setPadding(28,30,28,24);layout.setBackgroundColor(Color.rgb(13,18,29));ScrollView scroll=new ScrollView(this);scroll.addView(layout);setContentView(scroll);
  heading("YRC GAMING PRO");status=text("Root controller • reversible settings");
  Button grant=button("AUTHORIZE ROOT",()->task(()->{try{root("id");info("Root permission granted");}catch(Exception e){info("Root unavailable: "+e.getMessage());}}));
- for(int i=0;i<3;i++){final int k=i;Switch sw=new Switch(this);sw.setText(labels[i]);sw.setTextColor(Color.WHITE);sw.setTextSize(17);sw.setPadding(0,20,0,20);sw.setChecked(prefs.getBoolean("on"+i,false));switches[i]=sw;layout.addView(sw);sw.setOnCheckedChangeListener((v,on)->{if(!syncing)task(()->apply(k,on,sw));});}
+ for(int i=2;i<3;i++){final int k=i;Switch sw=new Switch(this);sw.setText(labels[i]);sw.setTextColor(Color.WHITE);sw.setTextSize(17);sw.setPadding(0,20,0,20);sw.setChecked(prefs.getBoolean("on"+i,false));switches[i]=sw;layout.addView(sw);sw.setOnCheckedChangeListener((v,on)->{if(!syncing)task(()->apply(k,on,sw));});}
  heading("TPP 16:9 PC SCREEN TEST");text("Changes Android display resolution to 16:9 for a PC-shaped screen. This is NOT a PUBG camera FOV unlock. It may crop/stretch the image, move touch controls or create black bars. Restore after testing.");
  button("APPLY 16:9 LANDSCAPE SCREEN",()->new AlertDialog.Builder(this).setTitle("Change entire phone display?").setMessage("The phone's resolution will change until restored. Touch controls may shift. Continue only if you know how to recover using root shell: wm size reset").setNegativeButton("CANCEL",null).setPositiveButton("APPLY",(d,w)->task(()->applyAspect169())).show());
  button("RESTORE ORIGINAL SCREEN SIZE",()->task(()->restoreScreen()));
  button("SHOW CURRENT SCREEN SIZE",()->task(()->{try{info(root("wm size"));}catch(Exception e){info(e.getMessage());}}));
  button("OPEN PUBG FOR FOV & GRAPHICS",()->{Intent x=getPackageManager().getLaunchIntentForPackage("com.tencent.ig");if(x==null)x=getPackageManager().getLaunchIntentForPackage("com.pubg.imobile");if(x!=null)startActivity(x);else info("Install PUBG Mobile first. In PUBG: Settings > Controls/Camera > FPP Camera View; Graphics > Smooth and highest officially available frame rate.");});
  heading("DISPLAY HARDWARE CHECK");button("SHOW REAL PANEL MODES",()->{android.view.Display d=getWindowManager().getDefaultDisplay();StringBuilder modesText=new StringBuilder("Active: "+d.getRefreshRate()+"Hz\nSupported modes: ");for(android.view.Display.Mode mode:d.getSupportedModes())modesText.append("\n").append(mode.getPhysicalWidth()).append("x").append(mode.getPhysicalHeight()).append(" @ ").append(mode.getRefreshRate()).append("Hz");info(modesText.toString());});
- heading("DISPLAY PROFILES");
- button("SMOOTH / 120Hz DISPLAY",()->task(()->displayProfile("120.0")));
- button("HIGH REFRESH / 144Hz DISPLAY",()->task(()->displayProfile("144.0")));
- button("REQUEST PANEL MODE 120Hz",()->requestPanelMode(120f));
- button("REQUEST PANEL MODE 144Hz",()->requestPanelMode(144f));
- button("RESTORE PANEL MODE",()->requestPanelMode(0f));
+ heading("DISPLAY CONTROL");text("XOS rejected the 144Hz settings and chose 90Hz during testing. This app cannot force PUBG FPS. Use the device refresh-rate setting and PUBG supported frame-rate option.");
+
+
+
+
+
+ button("CHECK ACTIVE DISPLAY RATE",()->{android.view.Display d=getWindowManager().getDefaultDisplay();info("Active panel: "+d.getRefreshRate()+"Hz (YRC window). This is not PUBG FPS.");});
  button("RESTORE DISPLAY PROFILE",()->task(()->{try{for(int i=0;i<2;i++)restore(i);info("Display settings restored");}catch(Exception e){info(e.toString());}}));
  heading("ACTIVE PERFORMANCE");
  button("ENABLE GAME PERFORMANCE MODE",()->task(()->{try{Intent battery=registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));int t=battery==null?-1:battery.getIntExtra("temperature",-1);if(t>=420){info("Too hot: "+(t/10f)+" C. Performance mode blocked.");return;}String result=root("cmd power set-fixed-performance-mode-enabled true");prefs.edit().putBoolean("performance",true).commit();info("Requested Android fixed performance mode. Vendor may ignore it; temperature and PUBG limits still apply. "+result);}catch(Exception e){info("Performance mode unavailable: "+e.getMessage());}}));
@@ -44,7 +45,7 @@ public class MainActivity extends Activity {
  void restoreScreen(){try{String old=prefs.getString("wm_original","");if(old.isEmpty()){info("No saved size. No changes made.");return;}String override=null;for(String line:old.split("\\n"))if(line.startsWith("Override size:"))override=line.substring("Override size:".length()).trim();if(override!=null&&override.matches("[0-9]+x[0-9]+"))root("wm size "+override);else root("wm size reset");prefs.edit().remove("wm_original").commit();info("Original screen size restored: "+root("wm size"));}catch(Exception e){info("Restore failed: "+e.getMessage());}}
  void requestPanelMode(float hz){android.view.Display d=getWindowManager().getDefaultDisplay();android.view.Display.Mode chosen=null;if(hz>0){for(android.view.Display.Mode mode:d.getSupportedModes())if(Math.abs(mode.getRefreshRate()-hz)<1f && (chosen==null||mode.getPhysicalWidth()*mode.getPhysicalHeight()>chosen.getPhysicalWidth()*chosen.getPhysicalHeight()))chosen=mode;if(chosen==null){info("No advertised "+hz+"Hz mode. Nothing changed.");return;}}android.view.WindowManager.LayoutParams lp=getWindow().getAttributes();lp.preferredDisplayModeId=chosen==null?0:chosen.getModeId();getWindow().setAttributes(lp);info("Requested mode for YRC app window only. Active: "+d.getRefreshRate()+"Hz. This does NOT set PUBG FPS or force XOS globally.");}
  void displayProfile(String hz){try{boolean supported=false;for(android.view.Display.Mode m:getWindowManager().getDefaultDisplay().getSupportedModes())if(Math.abs(m.getRefreshRate()-Float.parseFloat(hz))<1.0f)supported=true;if(!supported)throw new Exception("Panel does not advertise "+hz+" Hz in current mode");for(int i=0;i<2;i++){String old=root("settings get system "+keys[i]);if(!prefs.contains("old"+i))prefs.edit().putString("old"+i,old).commit();root("settings put system "+keys[i]+" "+hz);String actual=root("settings get system "+keys[i]);if(!hz.equals(actual))throw new Exception("XOS changed setting back to "+actual+"; cannot force through Settings.System");prefs.edit().putBoolean("on"+i,true).commit();}refreshSwitches();info("Requested "+hz+" Hz display preference. Actual refresh and PUBG FPS depend on device/game support.");}catch(Exception e){refreshSwitches();info("Display profile unsupported or overridden by XOS: "+e.getMessage()+". Set refresh rate in phone Display settings.");}}
- void refreshSwitches(){runOnUiThread(()->{syncing=true;for(int j=0;j<3;j++)switches[j].setChecked(prefs.getBoolean("on"+j,false));syncing=false;});}
+ void refreshSwitches(){runOnUiThread(()->{syncing=true;for(int j=0;j<3;j++)if(switches[j]!=null)switches[j].setChecked(prefs.getBoolean("on"+j,false));syncing=false;});}
  void apply(int i,boolean on,Switch sw){try{if(on){String old=root("settings get "+tables[i]+" "+keys[i]);if(!prefs.contains("old"+i))prefs.edit().putString("old"+i,old).commit();root("settings put "+tables[i]+" "+keys[i]+" "+desired[i]);String actual=root("settings get "+tables[i]+" "+keys[i]);if(!actual.equals(desired[i]))throw new Exception("XOS changed setting back to "+actual+"; cannot force through Settings.System");prefs.edit().putBoolean("on"+i,true).commit();info(labels[i]+" enabled");}else{restore(i);info(labels[i]+" restored");}}catch(Exception e){prefs.edit().putBoolean("on"+i,false).commit();info("Unable to apply: "+e.getMessage()+". XOS may override this setting.");}finally{refreshSwitches();}}
  void restore(int i){try{String old=prefs.getString("old"+i,"null");if(old.equals("null"))root("settings delete "+tables[i]+" "+keys[i]);else root("settings put "+tables[i]+" "+keys[i]+" "+old);prefs.edit().putBoolean("on"+i,false).commit();}catch(Exception e){info("Restore error: "+e.getMessage());}finally{refreshSwitches();}}
  void heading(String s){TextView t=text(s);t.setTextSize(23);t.setPadding(0,26,0,12);t.setTextColor(Color.rgb(66,209,173));}
