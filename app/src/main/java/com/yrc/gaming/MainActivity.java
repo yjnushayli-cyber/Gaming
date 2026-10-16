@@ -247,7 +247,7 @@ public class MainActivity extends Activity {
       String out=root("cmd game set --mode performance --fps "+fps+" "+game);
       if(looksLikeHelp(out)){message("أمر FPS غير مدعوم على هذا الإصدار؛ لم يتم تأكيد تطبيقه.");return;}
       String config=root("cmd game list-configs "+game);
-      message("تم إرسال طلب "+fps+"FPS إلى Game Mode.\\n"+brief(config)+"\\nهذا ليس قياس FPS داخل اللعبة، وقد تتجاهل ببجي الطلب.");
+      message("تم إرسال طلب "+fps+"FPS إلى Game Mode.\n"+brief(config)+"\nهذا ليس قياس FPS داخل اللعبة، وقد تتجاهل ببجي الطلب.");
     }catch(Exception e){message("فشل طلب FPS: "+e.getMessage());}
   }
   private boolean looksLikeHelp(String out){
@@ -262,11 +262,10 @@ public class MainActivity extends Activity {
     if(game==null){message("لم يتم العثور على ببجي");return;}
     try{
       root("id");
-      String help=root("cmd game help");
-      if(!help.contains("--downscale")||!help.contains("set")){message("نسخة Android Game Mode لا تدعم تغيير دقة الرسم بهذا الأمر.");return;}
       String result=root("cmd game set --mode performance --downscale 0.9 "+game);
+      if(looksLikeHelp(result)){message("رفض XOS أمر تخفيف الرسم؛ لم يتم تأكيد التعديل.");return;}
       String modes=root("cmd game list-configs "+game);
-      message("تم إرسال طلب دقة رسم 90% إلى Android. "+result+"\n"+brief(modes)+"\nأعد تشغيل PUBG لتطبيق التغيير.");
+      message("أُرسل طلب الرسم 90%.\n"+brief(modes)+"\nأعد تشغيل ببجي. لا يمكن تأكيد تطبيقه إلا بقياس فعلي.");
     }catch(Exception e){message("لم يُطبّق تخفيف الرسم: "+e.getMessage());}
   }
   private void resetDownscale(){
