@@ -239,7 +239,7 @@ public class MainActivity extends Activity {
     try{setSetting("system","min_refresh_rate","120.0");logs.add("الحد الأدنى: تم قبول الطلب");}catch(Exception e){logs.add("الحد الأدنى: XOS رفض الطلب");}
     try{String out=root("cmd game mode performance "+game);logs.add(looksLikeHelp(out)?"Game Mode: غير مدعوم":"Game Mode: أُرسل طلب performance");}catch(Exception e){logs.add("Game Mode: غير متاح");}
     try{String out=root("cmd game set --mode performance --fps 120 "+game);logs.add(looksLikeHelp(out)?"120FPS: الأمر غير مدعوم":"120FPS: أُرسل الطلب، دون ضمان قبول اللعبة");}catch(Exception e){logs.add("120FPS: لم يُقبل الأمر");}
-    message(android.text.TextUtils.join("\\n",logs).replace("\\n","\n")+"\nأعد تشغيل ببجي واختبر FPS الحقيقي.");
+    message(android.text.TextUtils.join(String.valueOf((char)10),logs));
   }
   private void request144(){
     try{
