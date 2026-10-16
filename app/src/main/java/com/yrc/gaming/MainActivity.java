@@ -22,7 +22,7 @@ public class MainActivity extends Activity {
  button("RESTORE ORIGINAL SCREEN SIZE",()->task(()->restoreScreen()));
  button("SHOW CURRENT SCREEN SIZE",()->task(()->{try{info(root("wm size"));}catch(Exception e){info(e.getMessage());}}));
  button("OPEN PUBG FOR FOV & GRAPHICS",()->{Intent x=getPackageManager().getLaunchIntentForPackage("com.tencent.ig");if(x==null)x=getPackageManager().getLaunchIntentForPackage("com.pubg.imobile");if(x!=null)startActivity(x);else info("Install PUBG Mobile first. In PUBG: Settings > Controls/Camera > FPP Camera View; Graphics > Smooth and highest officially available frame rate.");});
- heading("DISPLAY HARDWARE CHECK");button("SHOW REAL PANEL MODES",()->{android.view.Display d=getWindowManager().getDefaultDisplay();StringBuilder b=new StringBuilder("Active: "+d.getRefreshRate()+"Hz\\nSupported modes: ");for(android.view.Display.Mode m:d.getSupportedModes())b.append("\\n").append(m.getPhysicalWidth()).append("x").append(m.getPhysicalHeight()).append(" @ ").append(m.getRefreshRate()).append("Hz");info(b.toString());});
+ heading("DISPLAY HARDWARE CHECK");button("SHOW REAL PANEL MODES",()->{android.view.Display d=getWindowManager().getDefaultDisplay();StringBuilder modesText=new StringBuilder("Active: "+d.getRefreshRate()+"Hz\nSupported modes: ");for(android.view.Display.Mode mode:d.getSupportedModes())modesText.append("\n").append(mode.getPhysicalWidth()).append("x").append(mode.getPhysicalHeight()).append(" @ ").append(mode.getRefreshRate()).append("Hz");info(modesText.toString());});
  heading("DISPLAY PROFILES");
  button("SMOOTH / 120Hz DISPLAY",()->task(()->displayProfile("120.0")));
  button("HIGH REFRESH / 144Hz DISPLAY",()->task(()->displayProfile("144.0")));
