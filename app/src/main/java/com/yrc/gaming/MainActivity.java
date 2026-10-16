@@ -1,59 +1,180 @@
 package com.yrc.gaming;
 
-import android.app.*;import android.os.*;import android.content.*;import android.graphics.Color;import android.view.*;import android.widget.*;import java.io.*;import java.util.*;import java.util.concurrent.*;
+import android.app.*;
+import android.os.*;
+import android.content.*;
+import android.graphics.Color;
+import android.view.*;
+import android.widget.*;
+import java.io.*;
+import java.util.*;
+import java.util.concurrent.*;
 
 public class MainActivity extends Activity {
- LinearLayout layout; TextView status; ExecutorService worker=Executors.newSingleThreadExecutor();
- final String[] keys={"peak_refresh_rate","min_refresh_rate","low_power"};
- final String[] tables={"system","system","global"};
- final String[] labels={"Request 144Hz Display (legacy)","Keep Refresh Rate High (legacy)","Disable Battery Saver"};
- final String[] desired={"144.0","144.0","0"};
- boolean syncing=false; Switch[] switches=new Switch[3];
- android.content.SharedPreferences prefs;
- String root(String cmd) throws Exception {java.lang.Process p=new ProcessBuilder("su","-c",cmd).redirectErrorStream(true).start();ByteArrayOutputStream b=new ByteArrayOutputStream();byte[] a=new byte[1024];int n;while((n=p.getInputStream().read(a))!=-1)b.write(a,0,n);int exit=p.waitFor();if(exit!=0)throw new Exception(b.toString());return b.toString().trim();}
- void task(Runnable r){worker.execute(r);}
- void info(String msg){runOnUiThread(()->status.setText(msg));}
- public void onCreate(Bundle b){super.onCreate(b);prefs=getSharedPreferences("settings",0);layout=new LinearLayout(this);layout.setOrientation(1);layout.setPadding(28,30,28,24);layout.setBackgroundColor(Color.rgb(13,18,29));ScrollView scroll=new ScrollView(this);scroll.addView(layout);setContentView(scroll);
- heading("YRC GAMING PRO");status=text("Root controller • reversible settings");
- Button grant=button("AUTHORIZE ROOT",()->task(()->{try{root("id");info("Root permission granted");}catch(Exception e){info("Root unavailable: "+e.getMessage());}}));
- for(int i=2;i<3;i++){final int k=i;Switch sw=new Switch(this);sw.setText(labels[i]);sw.setTextColor(Color.WHITE);sw.setTextSize(17);sw.setPadding(0,20,0,20);sw.setChecked(prefs.getBoolean("on"+i,false));switches[i]=sw;layout.addView(sw);sw.setOnCheckedChangeListener((v,on)->{if(!syncing)task(()->apply(k,on,sw));});}
- heading("TPP 16:9 PC SCREEN TEST");text("Changes Android display resolution to 16:9 for a PC-shaped screen. This is NOT a PUBG camera FOV unlock. It may crop/stretch the image, move touch controls or create black bars. Restore after testing.");
- button("APPLY 16:9 LANDSCAPE SCREEN",()->new AlertDialog.Builder(this).setTitle("Change entire phone display?").setMessage("The phone's resolution will change until restored. Touch controls may shift. Continue only if you know how to recover using root shell: wm size reset").setNegativeButton("CANCEL",null).setPositiveButton("APPLY",(d,w)->task(()->applyAspect169())).show());
- button("RESTORE ORIGINAL SCREEN SIZE",()->task(()->restoreScreen()));
- button("SHOW CURRENT SCREEN SIZE",()->task(()->{try{info(root("wm size"));}catch(Exception e){info(e.getMessage());}}));
- button("OPEN PUBG FOR FOV & GRAPHICS",()->{Intent x=getPackageManager().getLaunchIntentForPackage("com.tencent.ig");if(x==null)x=getPackageManager().getLaunchIntentForPackage("com.pubg.imobile");if(x!=null)startActivity(x);else info("Install PUBG Mobile first. In PUBG: Settings > Controls/Camera > FPP Camera View; Graphics > Smooth and highest officially available frame rate.");});
- heading("DISPLAY HARDWARE CHECK");button("SHOW REAL PANEL MODES",()->{android.view.Display d=getWindowManager().getDefaultDisplay();StringBuilder modesText=new StringBuilder("Active: "+d.getRefreshRate()+"Hz\nSupported modes: ");for(android.view.Display.Mode mode:d.getSupportedModes())modesText.append("\n").append(mode.getPhysicalWidth()).append("x").append(mode.getPhysicalHeight()).append(" @ ").append(mode.getRefreshRate()).append("Hz");info(modesText.toString());});
- heading("DISPLAY CONTROL");text("XOS rejected the 144Hz settings and chose 90Hz during testing. This app cannot force PUBG FPS. Use the device refresh-rate setting and PUBG supported frame-rate option.");
+  private final ExecutorService executor=Executors.newSingleThreadExecutor();
+  private android.content.SharedPreferences prefs;
+  private TextView status;
+  private LinearLayout layout;
+  private RadioGroup profiles;
+  private CheckBox network, visual, touch;
+  private final int BG=Color.rgb(12,18,29), ACCENT=Color.rgb(56,207,174);
+  private final String[] PACKAGES={"com.tencent.ig","com.pubg.imobile","com.vng.pubgmobile","com.rekoo.pubgm"};
 
+  @Override public void onCreate(Bundle b){
+    super.onCreate(b);
+    getWindow().setStatusBarColor(BG);
+    getWindow().setNavigationBarColor(BG);
+    prefs=getSharedPreferences("yrc_profiles",MODE_PRIVATE);
+    ScrollView sc=new ScrollView(this);
+    sc.setFillViewport(true);
+    layout=new LinearLayout(this);
+    layout.setOrientation(LinearLayout.VERTICAL);
+    layout.setPadding(30,28,30,50);
+    layout.setBackgroundColor(BG);
+    layout.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+    sc.addView(layout);
+    setContentView(sc);
+    title("YRC | محرك الألعاب");
+    label("إنفينكس GT30 Pro • ببجي موبايل");
+    status=label("اختر ملف الأداء ثم اضغط تطبيق. التغييرات على النظام فقط، وليست على ملفات اللعبة.");
+    title("ملفات الأداء");
+    profiles=new RadioGroup(this);
+    profiles.setOrientation(RadioGroup.VERTICAL);
+    profiles.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+    addRadio(101,"ثبات الفريمات — أولوية 120FPS");
+    addRadio(102,"متوازن — أداء وصورة");
+    addRadio(103,"جودة العرض — دون تعديل ملفات اللعبة");
+    profiles.check(prefs.getInt("profile",101));
+    layout.addView(profiles);
+    title("التحسينات الإضافية");
+    network=check("الشبكة: إبقاء Wi-Fi نشطًا أثناء اتصال الجهاز به",true);
+    visual=check("العرض: إلغاء توفير الطاقة وطلب وضع الأداء",true);
+    touch=check("الاستجابة: منع إطفاء الشاشة أثناء فتح التطبيق فقط",false);
+    title("التحكم");
+    button("تطبيق التحسينات وتشغيل ببجي",()->run(()->applyAndLaunch()));
+    button("استعادة إعدادات النظام",()->run(()->restore()));
+    button("فتح إعدادات الرسومات في ببجي",()->launchGame());
+    button("فتح إعدادات الشاشة",()->{try{startActivity(new Intent(android.provider.Settings.ACTION_DISPLAY_SETTINGS));}catch(Exception e){message("تعذر فتح الإعدادات");}});
+    title("حدود التحسين");
+    label("المعدل 144Hz هو معدل تحديث الشاشة، وليس 144FPS داخل ببجي. اللعبة تعرض حاليًا 120FPS كحد أعلى. لا نغيّر دقة الشاشة أو ملفات اللعبة، ولا نعطّل الحماية الحرارية. الشبكة والرسومات تُحسّن ضمن إمكانيات أندرويد والجهاز.");
+  }
 
-
-
-
- button("CHECK ACTIVE DISPLAY RATE",()->{android.view.Display d=getWindowManager().getDefaultDisplay();info("Active panel: "+d.getRefreshRate()+"Hz (YRC window). This is not PUBG FPS.");});
- button("RESTORE DISPLAY PROFILE",()->task(()->{try{for(int i=0;i<2;i++)restore(i);info("Display settings restored");}catch(Exception e){info(e.toString());}}));
- heading("APPLY PUBG PERFORMANCE");text("Applies Android Game Mode PERFORMANCE to PUBG, turns Battery Saver off, requests fixed performance when available, and launches the game. Does not modify PUBG files, force 144FPS, or change native graphics assets.");button("APPLY PERFORMANCE + START PUBG",()->task(()->{try{String pkg=pubgPackage();if(pkg==null){info("PUBG package not found.");return;}Intent bat=registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));int temp=bat==null?-1:bat.getIntExtra("temperature",-1);android.os.PowerManager pm=(android.os.PowerManager)getSystemService(POWER_SERVICE);int thermal=android.os.Build.VERSION.SDK_INT>=29?pm.getCurrentThermalStatus():-1;if(temp>=420||thermal>=android.os.PowerManager.THERMAL_STATUS_SEVERE){info("Performance blocked due to high temperature: "+(temp/10f)+"C / thermal "+thermal);return;}String previous=root("settings get global low_power");if(!prefs.contains("old2"))prefs.edit().putString("old2",previous).commit();root("settings put global low_power 0");prefs.edit().putBoolean("on2",true).commit();refreshSwitches();String gameMode;try{String output=root("cmd game mode performance "+pkg);gameMode="Game Mode performance requested: "+output;}catch(Exception ex){gameMode="Game Mode not supported: "+ex.getMessage();}String fixed;try{root("cmd power set-fixed-performance-mode-enabled true");prefs.edit().putBoolean("performance",true).commit();fixed="Fixed performance requested";}catch(Exception ex){fixed="Fixed performance not supported";}String msg=gameMode+"; "+fixed+"; Battery Saver off. No guaranteed FPS.";info(msg);runOnUiThread(()->{Intent launch=getPackageManager().getLaunchIntentForPackage(pkg);if(launch!=null)startActivity(launch);else info("Unable to launch "+pkg);});}catch(Exception e){info("Performance apply failed: "+e.getMessage());}}));button("RESTORE PUBG PERFORMANCE",()->task(()->{StringBuilder msg=new StringBuilder();String pkg=pubgPackage();if(pkg!=null)try{root("cmd game mode standard "+pkg);msg.append("Game mode standard; ");}catch(Exception e){msg.append("Game mode restore unsupported; ");}try{root("cmd power set-fixed-performance-mode-enabled false");prefs.edit().putBoolean("performance",false).commit();msg.append("Fixed performance off; ");}catch(Exception e){msg.append("Fixed performance restore failed; ");}restore(2);info(msg+"Battery Saver restored if previously saved.");}));
- heading("PUBG 120FPS STABILITY");text("One tap requests Android fixed-performance mode, disables battery saver, and launches PUBG. It cannot override PUBG FPS limits or thermal throttling.");button("OPTIMIZE AND LAUNCH PUBG",()->task(()->{try{Intent bat=registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));int temp=bat==null?-1:bat.getIntExtra("temperature",-1);android.os.PowerManager pm=(android.os.PowerManager)getSystemService(POWER_SERVICE);int thermal=android.os.Build.VERSION.SDK_INT>=29?pm.getCurrentThermalStatus():-1;if(temp>=420 || thermal>=android.os.PowerManager.THERMAL_STATUS_SEVERE){info("Device is too hot for a performance boost. Cool it before playing. Battery: "+(temp/10f)+"C, thermal status: "+thermal);return;}String power=root("settings get global low_power");if(!prefs.contains("old2"))prefs.edit().putString("old2",power).commit();root("settings put global low_power 0");prefs.edit().putBoolean("on2",true).commit();refreshSwitches();String mode;try{root("cmd power set-fixed-performance-mode-enabled true");prefs.edit().putBoolean("performance",true).commit();mode="requested";}catch(Exception ignored){mode="not supported";}String msg="Battery saver off; Android fixed performance "+mode+". Battery "+(temp/10f)+"C. No guaranteed FPS lock.";info(msg);runOnUiThread(()->{Intent x=getPackageManager().getLaunchIntentForPackage("com.tencent.ig");if(x==null)x=getPackageManager().getLaunchIntentForPackage("com.pubg.imobile");if(x!=null)startActivity(x);else info(msg+" PUBG package not found.");});}catch(Exception e){info("Optimization failed: "+e.getMessage());}}));button("CHECK THERMAL THROTTLING",()->{Intent bat=registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));int temp=bat==null?-1:bat.getIntExtra("temperature",-1);android.os.PowerManager pm=(android.os.PowerManager)getSystemService(POWER_SERVICE);int thermal=android.os.Build.VERSION.SDK_INT>=29?pm.getCurrentThermalStatus():-1;info("Battery temperature: "+(temp/10f)+"C; Android thermal status: "+thermal+" (0 none, 1 light, 2 moderate, 3 severe, 4 critical). Check again after an FPS drop.");});
- button("DIAGNOSE FPS DROP (ROOT)",()->task(()->{try{String cpu=root("for p in /sys/devices/system/cpu/cpufreq/policy*; do [ -f \"$p/scaling_cur_freq\" ] || continue; echo \"$(basename $p): cur=$(cat $p/scaling_cur_freq) max=$(cat $p/scaling_max_freq)\"; done");String governor=root("for p in /sys/devices/system/cpu/cpufreq/policy*; do [ -f \"$p/scaling_governor\" ] && echo \"$(basename $p): $(cat $p/scaling_governor)\"; done");Intent bat=registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));int temp=bat==null?-1:bat.getIntExtra("temperature",-1);android.os.PowerManager pm=(android.os.PowerManager)getSystemService(POWER_SERVICE);int thermal=android.os.Build.VERSION.SDK_INT>=29?pm.getCurrentThermalStatus():-1;info("FPS DROP DIAGNOSTIC\\nBattery: "+(temp<0?"unknown":(temp/10f)+"C")+"; thermal="+thermal+"\\nCPU kHz (instantaneous):\\n"+cpu+"\\nGovernor:\\n"+governor+"\\nThese are diagnostic readings, not measured PUBG FPS.");}catch(Exception e){info("Root diagnostic unavailable: "+e.getMessage());}}));
- heading("ACTIVE PERFORMANCE");
- button("ENABLE GAME PERFORMANCE MODE",()->task(()->{try{Intent battery=registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));int t=battery==null?-1:battery.getIntExtra("temperature",-1);if(t>=420){info("Too hot: "+(t/10f)+" C. Performance mode blocked.");return;}String result=root("cmd power set-fixed-performance-mode-enabled true");prefs.edit().putBoolean("performance",true).commit();info("Requested Android fixed performance mode. Vendor may ignore it; temperature and PUBG limits still apply. "+result);}catch(Exception e){info("Performance mode unavailable: "+e.getMessage());}}));
- button("DISABLE PERFORMANCE MODE",()->task(()->{try{root("cmd power set-fixed-performance-mode-enabled false");prefs.edit().putBoolean("performance",false).commit();info("Fixed performance mode disabled");}catch(Exception e){info("Unable to disable: "+e.getMessage());}}));
- heading("GAME CONTROLS");button("LAUNCH PUBG MOBILE",()->{Intent x=getPackageManager().getLaunchIntentForPackage("com.tencent.ig");if(x==null)x=getPackageManager().getLaunchIntentForPackage("com.pubg.imobile");if(x!=null)startActivity(x);else info("PUBG package not found");});
- button("FRAME INTERPOLATION / GAME SETTINGS",()->{startActivity(new Intent(android.provider.Settings.ACTION_SETTINGS));info("Open XArena/Game Mode and disable MEMC/frame interpolation if available. Vendor toggle is not exposed as a verified Android API.");});
- button("OPEN DISPLAY SETTINGS",()->{try{startActivity(new Intent(android.provider.Settings.ACTION_DISPLAY_SETTINGS));}catch(Exception e){info(e.getMessage());}});
- button("RESTORE ALL SETTINGS",()->task(()->{for(int i=0;i<3;i++)if(prefs.getBoolean("on"+i,false))restore(i);try{root("cmd power set-fixed-performance-mode-enabled false");prefs.edit().putBoolean("performance",false).commit();}catch(Exception ignored){}refreshSwitches();info("Settings restored");}));
- heading("SAFETY");button("BATTERY TEMPERATURE",()->{Intent x=registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));if(x!=null){int t=x.getIntExtra("temperature",-1);info("Battery: "+(t/10f)+" °C. Performance may throttle under load.");}});
- button("PING DIAGNOSTIC",()->task(()->{try{java.lang.Process p=new ProcessBuilder("ping","-c","4","-W","2","1.1.1.1").redirectErrorStream(true).start();ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] a=new byte[512];int n;while((n=p.getInputStream().read(a))!=-1)out.write(a,0,n);p.waitFor();info(out.toString());}catch(Exception e){info(e.toString());}}));
- }
- String pubgPackage(){String[] names={"com.tencent.ig","com.pubg.imobile","com.vng.pubgmobile","com.rekoo.pubgm"};for(String name:names)try{getPackageManager().getPackageInfo(name,0);return name;}catch(Exception ignored){}return null;}
- void applyAspect169(){try{String size=root("wm size");String[] lines=size.split("\\n");String physical=null;for(String line:lines){if(line.startsWith("Physical size:"))physical=line.substring("Physical size:".length()).trim();}if(physical==null||!physical.matches("[0-9]+x[0-9]+"))throw new Exception("Cannot determine physical resolution: "+size);String[] parts=physical.split("x");int a=Integer.parseInt(parts[0]),b=Integer.parseInt(parts[1]);int shortSide=Math.min(a,b),longSide=(int)Math.round(shortSide*16.0/9.0);longSide=(longSide/2)*2;if(longSide>Math.max(a,b))throw new Exception("Target larger than native resolution");if(!prefs.contains("wm_original"))prefs.edit().putString("wm_original",size).commit();root("wm size "+shortSide+"x"+longSide);info("16:9 display requested: "+shortSide+"x"+longSide+". Original: "+size+". Use RESTORE ORIGINAL SCREEN SIZE after test.");}catch(Exception e){info("16:9 failed: "+e.getMessage());}}
- void restoreScreen(){try{String old=prefs.getString("wm_original","");if(old.isEmpty()){info("No saved size. No changes made.");return;}String override=null;for(String line:old.split("\\n"))if(line.startsWith("Override size:"))override=line.substring("Override size:".length()).trim();if(override!=null&&override.matches("[0-9]+x[0-9]+"))root("wm size "+override);else root("wm size reset");prefs.edit().remove("wm_original").commit();info("Original screen size restored: "+root("wm size"));}catch(Exception e){info("Restore failed: "+e.getMessage());}}
- void requestPanelMode(float hz){android.view.Display d=getWindowManager().getDefaultDisplay();android.view.Display.Mode chosen=null;if(hz>0){for(android.view.Display.Mode mode:d.getSupportedModes())if(Math.abs(mode.getRefreshRate()-hz)<1f && (chosen==null||mode.getPhysicalWidth()*mode.getPhysicalHeight()>chosen.getPhysicalWidth()*chosen.getPhysicalHeight()))chosen=mode;if(chosen==null){info("No advertised "+hz+"Hz mode. Nothing changed.");return;}}android.view.WindowManager.LayoutParams lp=getWindow().getAttributes();lp.preferredDisplayModeId=chosen==null?0:chosen.getModeId();getWindow().setAttributes(lp);info("Requested mode for YRC app window only. Active: "+d.getRefreshRate()+"Hz. This does NOT set PUBG FPS or force XOS globally.");}
- void displayProfile(String hz){try{boolean supported=false;for(android.view.Display.Mode m:getWindowManager().getDefaultDisplay().getSupportedModes())if(Math.abs(m.getRefreshRate()-Float.parseFloat(hz))<1.0f)supported=true;if(!supported)throw new Exception("Panel does not advertise "+hz+" Hz in current mode");for(int i=0;i<2;i++){String old=root("settings get system "+keys[i]);if(!prefs.contains("old"+i))prefs.edit().putString("old"+i,old).commit();root("settings put system "+keys[i]+" "+hz);String actual=root("settings get system "+keys[i]);if(!hz.equals(actual))throw new Exception("XOS changed setting back to "+actual+"; cannot force through Settings.System");prefs.edit().putBoolean("on"+i,true).commit();}refreshSwitches();info("Requested "+hz+" Hz display preference. Actual refresh and PUBG FPS depend on device/game support.");}catch(Exception e){refreshSwitches();info("Display profile unsupported or overridden by XOS: "+e.getMessage()+". Set refresh rate in phone Display settings.");}}
- void refreshSwitches(){runOnUiThread(()->{syncing=true;for(int j=0;j<3;j++)if(switches[j]!=null)switches[j].setChecked(prefs.getBoolean("on"+j,false));syncing=false;});}
- void apply(int i,boolean on,Switch sw){try{if(on){String old=root("settings get "+tables[i]+" "+keys[i]);if(!prefs.contains("old"+i))prefs.edit().putString("old"+i,old).commit();root("settings put "+tables[i]+" "+keys[i]+" "+desired[i]);String actual=root("settings get "+tables[i]+" "+keys[i]);if(!actual.equals(desired[i]))throw new Exception("XOS changed setting back to "+actual+"; cannot force through Settings.System");prefs.edit().putBoolean("on"+i,true).commit();info(labels[i]+" enabled");}else{restore(i);info(labels[i]+" restored");}}catch(Exception e){prefs.edit().putBoolean("on"+i,false).commit();info("Unable to apply: "+e.getMessage()+". XOS may override this setting.");}finally{refreshSwitches();}}
- void restore(int i){try{String old=prefs.getString("old"+i,"null");if(old.equals("null"))root("settings delete "+tables[i]+" "+keys[i]);else root("settings put "+tables[i]+" "+keys[i]+" "+old);prefs.edit().putBoolean("on"+i,false).commit();}catch(Exception e){info("Restore error: "+e.getMessage());}finally{refreshSwitches();}}
- void heading(String s){TextView t=text(s);t.setTextSize(23);t.setPadding(0,26,0,12);t.setTextColor(Color.rgb(66,209,173));}
- TextView text(String s){TextView t=new TextView(this);t.setText(s);t.setTextColor(Color.WHITE);t.setTextSize(15);t.setPadding(0,12,0,12);layout.addView(t);return t;}
- Button button(String s,Runnable action){Button b=new Button(this);b.setText(s);layout.addView(b);b.setOnClickListener(v->action.run());return b;}
- protected void onDestroy(){worker.shutdown();super.onDestroy();}
+  private void addRadio(int id,String text){
+    RadioButton b=new RadioButton(this);
+    b.setId(id);b.setText(text);b.setTextColor(Color.WHITE);b.setTextSize(16);b.setPadding(0,10,0,10);
+    profiles.addView(b);
+  }
+  private CheckBox check(String text,boolean enabled){
+    CheckBox c=new CheckBox(this);c.setText(text);c.setTextColor(Color.WHITE);c.setTextSize(15);
+    c.setChecked(prefs.getBoolean("check_"+text,enabled));layout.addView(c);return c;
+  }
+  private void title(String s){TextView t=label(s);t.setTextSize(23);t.setTextColor(ACCENT);t.setPadding(0,24,0,10);}
+  private TextView label(String s){TextView t=new TextView(this);t.setText(s);t.setTextSize(15);t.setTextColor(Color.WHITE);t.setPadding(0,10,0,10);layout.addView(t);return t;}
+  private void button(String name,Runnable action){Button b=new Button(this);b.setText(name);layout.addView(b);b.setOnClickListener(v->action.run());}
+  private void run(Runnable r){executor.execute(r);}
+  private void message(String msg){runOnUiThread(()->status.setText(msg));}
+  private String root(String cmd)throws Exception{
+    Process p=new ProcessBuilder("su","-c",cmd).redirectErrorStream(true).start();
+    ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] buf=new byte[1024];int n;
+    try(InputStream in=p.getInputStream()){while((n=in.read(buf))!=-1){if(out.size()>16000)break;out.write(buf,0,n);}}
+    int code=p.waitFor();String text=out.toString("UTF-8").trim();
+    if(code!=0)throw new IOException("رمز "+code+": "+text);
+    return text;
+  }
+  private String pkg(){
+    for(String p:PACKAGES){try{getPackageManager().getPackageInfo(p,0);return p;}catch(Exception ignored){}}
+    return null;
+  }
+  private int temperature(){
+    Intent i=registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+    return i==null?-1:i.getIntExtra("temperature",-1);
+  }
+  private int thermal(){
+    PowerManager p=(PowerManager)getSystemService(POWER_SERVICE);
+    return Build.VERSION.SDK_INT>=29?p.getCurrentThermalStatus():0;
+  }
+  private void saveSetting(String table,String key)throws Exception{
+    String pref="old_"+table+"_"+key;
+    if(!prefs.contains(pref))prefs.edit().putString(pref,root("settings get "+table+" "+key)).commit();
+  }
+  private void setSetting(String table,String key,String value)throws Exception{
+    saveSetting(table,key);
+    root("settings put "+table+" "+key+" "+value);
+    String actual=root("settings get "+table+" "+key);
+    if(!value.equals(actual))throw new IOException("النظام لم يقبل "+key+" (القيمة: "+actual+")");
+  }
+  private void applyAndLaunch(){
+    String game=pkg();
+    if(game==null){message("ببجي غير موجودة أو غير ظاهرة للتطبيق.");return;}
+    int t=temperature(),th=thermal();
+    if((t>=420)||(th>=PowerManager.THERMAL_STATUS_SEVERE)){
+      message("الحرارة مرتفعة؛ لم يُفعّل وضع الأداء. حرارة البطارية: "+(t/10f)+"°C");return;
+    }
+    int profile=profiles.getCheckedRadioButtonId();
+    boolean net=network.isChecked(),vis=visual.isChecked(),input=touch.isChecked();
+    prefs.edit().putInt("profile",profile)
+      .putBoolean("check_"+network.getText(),net)
+      .putBoolean("check_"+visual.getText(),vis)
+      .putBoolean("check_"+touch.getText(),input).commit();
+    ArrayList<String> result=new ArrayList<>();
+    try{root("id");result.add("الروت: جاهز");}
+    catch(Exception e){message("لم تتوفر صلاحية الروت: "+e.getMessage());return;}
+    if(vis){
+      try{setSetting("global","low_power","0");result.add("توفير الطاقة: معطّل");}
+      catch(Exception e){result.add("توفير الطاقة: "+e.getMessage());}
+    }
+    try{
+      String mode=(profile==103?"standard":"performance");
+      root("cmd game mode "+mode+" "+game);
+      result.add("وضع اللعبة: "+(profile==103?"قياسي":"أداء")+" (طلب للنظام)");
+    }catch(Exception e){result.add("وضع اللعبة غير مدعوم: "+e.getMessage());}
+    if(profile!=103){
+      try{root("cmd power set-fixed-performance-mode-enabled true");prefs.edit().putBoolean("fixed",true).commit();result.add("الأداء الثابت: تم طلبه");}
+      catch(Exception e){result.add("الأداء الثابت غير مدعوم");}
+    }else{
+      try{root("cmd power set-fixed-performance-mode-enabled false");prefs.edit().putBoolean("fixed",false).commit();}catch(Exception ignored){}
+    }
+    if(net){
+      try{
+        android.net.ConnectivityManager cm=(android.net.ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
+        android.net.Network active=cm.getActiveNetwork();
+        android.net.NetworkCapabilities caps=cm.getNetworkCapabilities(active);
+        if(caps!=null&&caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)){
+          setSetting("global","wifi_sleep_policy","2");
+          result.add("سياسة بقاء Wi-Fi: تم طلب تفعيلها (قد يتجاهلها أندرويد الحديث)");
+        }else result.add("الشبكة: الاتصال الحالي ليس Wi-Fi؛ لم نغيّر الشبكة");
+      }catch(Exception e){result.add("إعداد Wi-Fi غير متاح: "+e.getMessage());}
+    }
+    if(input){runOnUiThread(()->getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON));result.add("إبقاء الشاشة نشطة أثناء فتح YRC");}
+    else runOnUiThread(()->getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON));
+    result.add("الرسومات: دون تغيير ملفات اللعبة أو دقة الشاشة");
+    message(android.text.TextUtils.join("\n",result));
+    runOnUiThread(()->launchGame());
+  }
+  private void launchGame(){
+    String game=pkg();
+    if(game==null){message("لم يتم العثور على ببجي");return;}
+    Intent i=getPackageManager().getLaunchIntentForPackage(game);
+    if(i!=null)startActivity(i);else message("تعذر تشغيل ببجي");
+  }
+  private void restore(){
+    ArrayList<String> result=new ArrayList<>();
+    try{root("id");}catch(Exception e){message("تحتاج صلاحية الروت للاستعادة");return;}
+    for(String[] entry:new String[][]{{"global","low_power"},{"global","wifi_sleep_policy"}}){
+      String table=entry[0],key=entry[1],pref="old_"+table+"_"+key;
+      if(!prefs.contains(pref))continue;
+      String old=prefs.getString(pref,"null");
+      try{
+        if("null".equals(old))root("settings delete "+table+" "+key);
+        else root("settings put "+table+" "+key+" "+old);
+        prefs.edit().remove(pref).commit();result.add(key+": تمت الاستعادة");
+      }catch(Exception e){result.add(key+": فشلت الاستعادة: "+e.getMessage());}
+    }
+    String game=pkg();
+    if(game!=null)try{root("cmd game mode standard "+game);result.add("وضع اللعبة: قياسي");}catch(Exception e){result.add("تعذرت استعادة وضع اللعبة");}
+    try{root("cmd power set-fixed-performance-mode-enabled false");prefs.edit().putBoolean("fixed",false).commit();result.add("وضع الأداء الثابت: متوقف");}catch(Exception e){result.add("تعذر إيقاف وضع الأداء الثابت");}
+    runOnUiThread(()->getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON));
+    message(android.text.TextUtils.join("\n",result));
+  }
+  @Override protected void onDestroy(){executor.shutdown();super.onDestroy();}
 }
