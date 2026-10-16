@@ -58,6 +58,7 @@ public class MainActivity extends Activity {
     button("إرشادات زاوية كاميرا TPP",()->showPcViewGuide());
     title("خيارات متقدمة قابلة للتطبيق");
     button("طلب شاشة 144Hz والتحقق من استجابة XOS",()->run(()->request144()));
+    button("وضع أداء قوي قابل للاستعادة (روت)",()->new AlertDialog.Builder(this).setTitle("تطبيق أداء قوي").setMessage("سيطلب 144Hz ويعطل توفير الطاقة ويطلب Game Mode performance و120FPS. لا يغيّر حرارة الجهاز أو ملفات اللعبة، وقد يتجاهل XOS بعض الطلبات.").setNegativeButton("إلغاء",null).setPositiveButton("تطبيق",(d,w)->run(()->strongMode())).show());
     button("تخفيف الحمل الرسومي لببجي 90% (تجريبي)",()->new AlertDialog.Builder(this).setTitle("تقليل حمل GPU").setMessage("يطلب من Android Game Mode عرض اللعبة بدقة رسم 90% إن كان مدعومًا، لتحسين ثبات الفريمات مقابل انخفاض طفيف في وضوح الصورة. لا يغير دقة الهاتف أو ملفات اللعبة. قد ترفضه PUBG أو XOS.").setNegativeButton("إلغاء",null).setPositiveButton("تطبيق",(d,w)->run(()->applyDownscale())).show());
     button("إلغاء تخفيف الحمل الرسومي",()->run(()->resetDownscale()));
     button("طلب 120FPS من Game Mode (تجريبي)",()->run(()->requestGameFps(120)));
@@ -228,6 +229,17 @@ public class MainActivity extends Activity {
       else report+="الاتصال بالراوتر مستقر في هذه العينة؛ قد يكون تذبذب PUBG خارج الشبكة المحلية.";
       message(report);
     }catch(Exception e){message("تعذر اختبار Wi-Fi: "+e.getMessage());}
+  }
+  private void strongMode(){
+    String game=pkg();if(game==null){message("ببجي غير موجودة");return;}
+    ArrayList<String> logs=new ArrayList<>();
+    try{root("id");}catch(Exception e){message("صلاحية الروت غير متاحة");return;}
+    try{setSetting("global","low_power","0");logs.add("توفير الطاقة: معطل");}catch(Exception e){logs.add("توفير الطاقة: "+e.getMessage());}
+    try{setSetting("system","peak_refresh_rate","144.0");logs.add("144Hz: تم قبول الطلب في settings (ليس FPS اللعبة)");}catch(Exception e){logs.add("144Hz: "+e.getMessage());}
+    try{setSetting("system","min_refresh_rate","120.0");logs.add("الحد الأدنى: تم قبول الطلب");}catch(Exception e){logs.add("الحد الأدنى: XOS رفض الطلب");}
+    try{String out=root("cmd game mode performance "+game);logs.add(looksLikeHelp(out)?"Game Mode: غير مدعوم":"Game Mode: أُرسل طلب performance");}catch(Exception e){logs.add("Game Mode: غير متاح");}
+    try{String out=root("cmd game set --mode performance --fps 120 "+game);logs.add(looksLikeHelp(out)?"120FPS: الأمر غير مدعوم":"120FPS: أُرسل الطلب، دون ضمان قبول اللعبة");}catch(Exception e){logs.add("120FPS: لم يُقبل الأمر");}
+    message(android.text.TextUtils.join("\\n",logs).replace("\\n","\n")+"\nأعد تشغيل ببجي واختبر FPS الحقيقي.");
   }
   private void request144(){
     try{
