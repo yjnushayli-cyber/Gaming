@@ -57,6 +57,7 @@ public class MainActivity extends Activity {
     button("فحص ملفات GFX وقراءة Active.sav",()->run(()->inspectActiveSav()));
     button("تجربة HDR + 120FPS داخل Active.sav",()->confirmActiveSavPreset(5));
     button("تجربة UltraHD + 120FPS داخل Active.sav",()->confirmActiveSavPreset(6));
+    button("فحص بقاء جودة GFX بعد اللعب (Active.sav)",()->run(()->verifyActiveSavAfterGame()));
     button("إلغاء تعديل Active.sav واستعادة نسخته",()->run(()->restoreActiveSav()));
     title("MAX Graphics — رسومات ثقيلة قريبة من PC (تجريبي)");
     label("أعلى تجربة بصرية داخل الملف: رندر 1.50 + ظلال محسّنة + تفاصيل المباني والأشجار والخامات. هذا ليس 4K ولا رسومات PC الحقيقية، وقد تهبط الفريمات بقوة. أغلق PUBG أولًا.");
@@ -872,10 +873,47 @@ public class MainActivity extends Activity {
         message("فشل تأكيد تعديل Active.sav، تمت محاولة استعادة النسخة الاحتياطية.");return;
       }
       root("rm -f '"+temp+"'");
+      prefs.edit().putInt("active_graphics_quality",graphics)
+        .putString("active_graphics_sha",applied).apply();
+      runOnUiThread(()->new AlertDialog.Builder(this)
+        .setTitle("تم حفظ GFX")
+        .setMessage("نجحت كتابة ملف Active.sav. هذا لا يضمن أن PUBG ستطبق جودة HDR/UltraHD أو 120FPS. يمكنك فتح اللعبة واختبار FPS والوضوح، ثم فحص الملف بعد اللعب.")
+        .setNegativeButton("إغلاق",null)
+        .setPositiveButton("فتح PUBG",(dialog,which)->launchGame()).show());
       message("تم تعديل "+changed+" حقول داخل Active.sav والتحقق من تطابق SHA256.\n"+
         "الطلب: "+(graphics==5?"HDR":"UltraHD")+" و120FPS.\n"+
         "هذا إثبات كتابة لا إثبات تشغيل الإعدادات؛ قد تتجاهلها اللعبة أو تعيد ضبطها. نسخة الاستعادة: "+backup);
     }catch(Exception e){message("تعذر تطبيق Active.sav عند «"+stage+"»: "+e.getMessage());}
+  }
+  private void verifyActiveSavAfterGame(){
+    try{
+      root("id");
+      byte[] saved=activeSavBytes();
+      String[] keys={"FPSLevel","BattleFPS","BattleRenderQuality"};
+      java.util.HashMap<String,Integer> readings=new java.util.HashMap<>();
+      for(String key:keys){
+        int pos=activePropertyOffset(saved,key);
+        if(pos<0){message("لم أجد "+key+" في ملف Active.sav الحالي؛ قد تختلف صيغة الإصدار.");return;}
+        readings.put(key,savInt(saved,pos));
+      }
+      String sha=root("sha256sum '"+activeSavPath()+"'").trim().split(" ")[0];
+      String expected=prefs.getString("active_graphics_sha","");
+      int requested=prefs.getInt("active_graphics_quality",-1);
+      int current=readings.get("BattleRenderQuality");
+      boolean retained=requested>=0&&current==requested&&readings.get("BattleFPS")==8&&readings.get("FPSLevel")==8;
+      String result;
+      if(requested<0)result="لم يتم تسجيل تطبيق وضع HDR/UltraHD بعد في هذه النسخة من YRC.";
+      else if(retained)result="القيم الثلاث بقيت محفوظة بعد اللعب، لكن هذا لا يثبت أن محرك PUBG فعّلها.";
+      else result="إعدادات Active.sav تغيرت أو عادت لقيم أخرى بعد اللعب؛ التعديل غير ثابت في هذا الإصدار.";
+      String fingerprint=expected.isEmpty()?"لا توجد بصمة سابقة":
+        expected.equalsIgnoreCase(sha)?"مطابق تمامًا لملف التعديل":"تغير محتوى ملف Active.sav";
+      message("نتيجة فحص GFX بعد اللعب (قراءة فقط)\n"+
+        "BattleFPS="+readings.get("BattleFPS")+
+        " / FPSLevel="+readings.get("FPSLevel")+
+        " / BattleRenderQuality="+current+"\n"+
+        "الجودة المطلوبة: "+(requested==6?"UltraHD":requested==5?"HDR":"غير محددة")+"\n"+
+        "بصمة الملف: "+fingerprint+"\n\n"+result);
+    }catch(Exception e){message("تعذر فحص Active.sav بعد اللعب: "+e.getMessage());}
   }
   private void restoreActiveSav(){
     try{
@@ -890,6 +928,7 @@ public class MainActivity extends Activity {
       root("cat '"+backup+"' > '"+path+"'");
       String a=root("sha256sum '"+backup+"'").trim().split(" ")[0];
       String b=root("sha256sum '"+path+"'").trim().split(" ")[0];
+      if(a.equalsIgnoreCase(b))prefs.edit().remove("active_graphics_quality").remove("active_graphics_sha").apply();
       message(a.equalsIgnoreCase(b)?"تم استرجاع Active.sav كما كان قبل تجربة GFX.":
         "لم نستطع تأكيد الاستعادة؛ لا تفتح اللعبة قبل فحص الملف.");
     }catch(Exception e){message("تعذرت استعادة Active.sav: "+e.getMessage());}
