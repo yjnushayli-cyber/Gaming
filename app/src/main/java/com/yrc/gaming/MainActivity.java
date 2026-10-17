@@ -51,6 +51,9 @@ public class MainActivity extends Activity {
     button("تفعيل جودة متوازنة + 120FPS",()->run(()->applyGraphicsProfile(false)));
     button("تفعيل أولوية ثبات 120FPS",()->run(()->applyGraphicsProfile(true)));
     button("استعادة دقة العرض الأصلية",()->run(()->restoreGraphicsProfile()));
+    title("رسومات أوضح + منظور TPP واسع");
+    label("ملف موحد يحافظ على دقة الشاشة الأصلية و120Hz، ثم يفتح إرشادات رفع TPP من داخل PUBG. لا يغيّر ملفات اللعبة أو يزعم 4K/240FPS.");
+    button("تفعيل رسومات أوضح + TPP واسع",()->run(()->applyPcLikeProfile()));
     title("التحسينات الإضافية");
     network=check("الشبكة: إبقاء Wi-Fi نشطًا أثناء اتصال الجهاز به",true);
     visual=check("العرض: إلغاء توفير الطاقة وطلب وضع الأداء",true);
@@ -244,6 +247,33 @@ public class MainActivity extends Activity {
       else report+="الاتصال بالراوتر مستقر في هذه العينة؛ قد يكون تذبذب PUBG خارج الشبكة المحلية.";
       message(report);
     }catch(Exception e){message("تعذر اختبار Wi-Fi: "+e.getMessage());}
+  }
+  private void applyPcLikeProfile(){
+    ArrayList<String> logs=new ArrayList<>();
+    try{
+      root("id");
+      if(thermal()>=PowerManager.THERMAL_STATUS_SEVERE||temperature()>=420){
+        message("الحرارة مرتفعة؛ لم نطبق وضع الجودة.");return;
+      }
+      if(!prefs.contains("gfx_original_wm"))prefs.edit().putString("gfx_original_wm",root("wm size")).commit();
+      if(!prefs.contains("gfx_old_xos"))prefs.edit().putString("gfx_old_xos",root("settings get system tran_refresh_mode")).commit();
+      if(!prefs.contains("gfx_old_peak"))prefs.edit().putString("gfx_old_peak",root("settings get system peak_refresh_rate")).commit();
+      root("wm size reset");
+      logs.add("دقة الشاشة: الأصلية 1224×2720 (إلغاء تخفيض الدقة)");
+      root("settings put system tran_refresh_mode 120");
+      root("settings put system peak_refresh_rate 120.0");
+      logs.add("XOS: طلب 120Hz، ولا يثبت ذلك FPS اللعبة");
+      String game=pkg();
+      if(game!=null){
+        try{root("cmd game mode 2 "+game);logs.add("تم إرسال طلب Game Mode performance");}
+        catch(Exception e){logs.add("Game Mode غير مدعوم");}
+      }
+      logs.add("PUBG: اترك 120FPS وجرّب Anti-Aliasing 2x فقط، ثم الظلال إذا بقي الأداء مستقرًا.");
+      logs.add("TPP: ارفع زاوية كاميرا الشخص الثالث لأعلى قيمة رسمية داخل إعدادات اللعبة.");
+      logs.add("زر استعادة دقة العرض الأصلية يعيد إعدادات XOS السابقة.");
+      message(android.text.TextUtils.join("\\n",logs));
+      runOnUiThread(()->showPcViewGuide());
+    }catch(Exception e){logs.add("تعذر إكمال الملف: "+e.getMessage());message(android.text.TextUtils.join("\\n",logs));}
   }
   private void applyGraphicsProfile(boolean stable){
     ArrayList<String> logs=new ArrayList<>();
