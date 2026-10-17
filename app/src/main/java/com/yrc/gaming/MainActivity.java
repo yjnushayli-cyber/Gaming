@@ -467,7 +467,7 @@ public class MainActivity extends Activity {
     try{
       if(!java.util.Arrays.asList("1.1","1.15","1.25").contains(scale)){message("مستوى غير مدعوم");return;}
       root("id");
-      if(!root("pidof com.tencent.ig 2>/dev/null").trim().isEmpty()){message("أغلق PUBG بالكامل أولًا.");return;}
+      if(!root("pidof com.tencent.ig 2>/dev/null || true").trim().isEmpty()){message("أغلق PUBG بالكامل أولًا.");return;}
       String path=pubgIniPath(),backup=iniBackupPath();
       String original=new String(android.util.Base64.decode(root("base64 '"+path+"'"),android.util.Base64.DEFAULT),java.nio.charset.StandardCharsets.UTF_8);
       if(original.length()<100||original.length()>60000){message("تعذر قراءة الملف بأمان.");return;}
@@ -514,7 +514,7 @@ public class MainActivity extends Activity {
   private void restoreIniClarity(){
     try{
       root("id");
-      if(!root("pidof com.tencent.ig 2>/dev/null").trim().isEmpty()){message("أغلق PUBG بالكامل قبل الاستعادة.");return;}
+      if(!root("pidof com.tencent.ig 2>/dev/null || true").trim().isEmpty()){message("أغلق PUBG بالكامل قبل الاستعادة.");return;}
       String backup=iniBackupPath(),path=pubgIniPath();
       if(!root("test -f '"+backup+"' && echo EXISTS").contains("EXISTS")){message("لا توجد نسخة احتياطية لهذا التعديل.");return;}
       root("cat '"+backup+"' > '"+path+"'");
