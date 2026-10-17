@@ -75,38 +75,67 @@ final class KernelBoost {
         java.util.regex.Matcher m=java.util.regex.Pattern.compile("/devfreq/([^/]+)").matcher(p);
         return m.find()?"GPU "+m.group(1):"GPU";
     }
-    private boolean boost(String path,List<String> report){
+    // 0 = unavailable/rejected, 1 = actual change, 2 = previously applied and confirmed.
+    private int boost(String path,List<String> report){
         try{
-            if(!whitelisted(path))return false;
-            // Idempotent: a second tap must never compound minimum frequencies.
-            if(prefs.contains(PREFIX+path)){
-                report.add(shortName(path)+": وضع Boost مفعّل سابقًا، لم نرفع التردد مرة أخرى.");
-                return false;
-            }
-            String savedValue=read(path);
-            long current=parse(savedValue);
-            String maxName=path.replace("scaling_min_freq","scaling_max_freq").replace("/min_freq","/max_freq");
+            if(!whitelisted(path))return 0;
+            String currentText=read(path);
+            long current=parse(currentText);
+            String backup=prefs.getString(PREFIX+path,null);
+            // Crucial: use the FIRST recorded pre-boost baseline even on repeat presses.
+            long baseline=backup==null?current:parse(backup);
+            String maxName=path.replace("scaling_min_freq","scaling_max_freq")
+                .replace("/min_freq","/max_freq");
             long maximum=parse(read(maxName));
-            if(maximum<=current||maximum<=0)return false;
-            long goal=current+(maximum-current)*35/100;
-            String listName=path.replace("scaling_min_freq","scaling_available_frequencies").replace("/min_freq","/available_frequencies");
+            if(maximum<=0||baseline>=maximum){
+                report.add(shortName(path)+": التردد الأعلى المتاح لا يسمح برفع الحد الأدنى.");
+                return 0;
+            }
+            long goal=baseline+(maximum-baseline)*35/100;
+            String listName=path.replace("scaling_min_freq","scaling_available_frequencies")
+                .replace("/min_freq","/available_frequencies");
             long target=goal;
             try{target=chooseAvailable(read(listName),goal,maximum);}
             catch(Exception ignored){}
-            if(target<=current||target>maximum)return false;
-            save(path,savedValue);
+            if(target<=baseline||target>maximum){
+                report.add(shortName(path)+": لا يوجد حد أدنى جديد آمن ضمن نطاق الترددات المدعوم.");
+                return 0;
+            }
+
+            // Old version only read the preferences and said "already enabled".
+            // Verify the actual kernel value instead. If it reset, re-apply the SAME
+            // baseline-derived floor; NEVER calculate another increase from current.
+            if(backup!=null&&current>=target){
+                report.add(shortName(path)+": مؤكد حاليًا "+current+
+                    " (الهدف "+target+"؛ التفعيل السابق ما زال مطبقًا).");
+                return 2;
+            }
+            if(current>=target){
+                report.add(shortName(path)+": التردد الحالي "+current+
+                    " يغطي هدف Boost من النظام؛ لا داعي لتغييره.");
+                return 0;
+            }
+
+            // Save original before a write, including when migrating old saved state.
+            if(backup==null)save(path,currentText);
             write(path,target);
-            long applied=parse(read(path));
-            if(applied>current&&applied<=maximum){
-                report.add(shortName(path)+": "+current+" → "+applied+" (رفع الحد الأدنى)");
-                return true;
+            long actual=parse(read(path));
+            if(actual>=target&&actual<=maximum){
+                report.add(shortName(path)+": "+current+" → "+actual+
+                    (backup==null?" (تطبيق جديد)":" (إعادة تطبيق بعد زوال التأثير)"));
+                return 1;
+            }
+            if(actual>current&&actual<=maximum){
+                report.add(shortName(path)+": رفع جزئي "+current+" → "+actual+
+                    "؛ النواة لم تعتمد كامل الهدف "+target+".");
+                return 1;
             }
             try{write(path,current);}catch(Exception ignored){}
-            report.add(shortName(path)+": نواة الجهاز رفضت تثبيت الحد الأدنى.");
-            return false;
+            report.add(shortName(path)+": رفضت النواة تعديل التردد؛ تم محاولة إرجاع القيمة السابقة.");
+            return 0;
         }catch(Exception e){
-            report.add(shortName(path)+": غير مدعوم ("+safeError(e)+")");
-            return false;
+            report.add(shortName(path)+": تعذر تعديل النواة ("+safeError(e)+")");
+            return 0;
         }
     }
     private String safeError(Exception e){
@@ -115,14 +144,16 @@ final class KernelBoost {
     }
     List<String> apply(){
         ArrayList<String> notes=new ArrayList<>();
-        int changed=0,cpuCount=0,gpuCount=0;
+        int changed=0,confirmed=0,cpuCount=0,gpuCount=0;
         try{
             if(!"0".equals(root("id -u")))throw new IOException("Root permission unavailable");
             String cpuDirs=root("for d in /sys/devices/system/cpu/cpufreq/policy[0-9]*; do [ -f \"$d/scaling_min_freq\" ] && echo \"$d\"; done");
             for(String path:cpuDirs.split("\\r?\\n")){
                 if(!path.matches("/sys/devices/system/cpu/cpufreq/policy[0-9]{1,3}"))continue;
                 if(cpuCount++>=8)break;
-                if(boost(path+"/scaling_min_freq",notes))changed++;
+                int result=boost(path+"/scaling_min_freq",notes);
+                if(result==1)changed++;
+                if(result==2)confirmed++;
             }
             if(cpuCount==0)notes.add("CPU: واجهات cpufreq غير موجودة على هذه النواة.");
 
@@ -133,12 +164,17 @@ final class KernelBoost {
             for(String path:gpuDirs.split("\\r?\\n")){
                 if(!path.matches("/sys/class/devfreq/[A-Za-z0-9_.:-]{1,100}"))continue;
                 if(gpuCount++>=2)break;
-                if(boost(path+"/min_freq",notes))changed++;
+                int result=boost(path+"/min_freq",notes);
+                if(result==1)changed++;
+                if(result==2)confirmed++;
             }
             if(gpuCount==0)notes.add("GPU: لا توجد واجهة devfreq موثوقة؛ تركناه للنظام.");
         }catch(Exception e){notes.add("Kernel Boost: "+safeError(e));}
-        notes.add("تعديلات النواة المؤكدة: "+changed);
-        notes.add("لم نغيّر ترددات قصوى أو حرارة الجهاز أو ملفات PUBG.");
+        notes.add("تغييرات تردد جديدة/أُعيد تطبيقها: "+changed+
+            " | إعدادات سابقة تم تأكيد بقائها: "+confirmed);
+        if(changed==0&&confirmed==0)
+            notes.add("لم يتأكد أي Boost لتردد النواة؛ يلزم الاطلاع على أسباب الرفض بالأعلى.");
+        notes.add("لا ترددات قصوى ولا تعطيل للحماية الحرارية ولا تعديل لملفات PUBG.");
         return notes;
     }
     List<String> restore(){
