@@ -2,6 +2,8 @@ package com.yrc.gaming;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.NotificationManager;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.content.Context;
@@ -43,6 +45,8 @@ public class MainActivity extends Activity {
     private LinearLayout main;
     private TextView status;
     private String lastReport="جاهز • تحسينات نظام Android فقط، دون تعديل ملفات PUBG.";
+    private int pendingSessionPercent=90;
+    private static final int NOTIFICATION_REQUEST=501;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -91,12 +95,20 @@ public class MainActivity extends Activity {
         scroll.addView(main);
         frame.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
 
-        heading("YRC GAMING PRO 4.3 • STABILITY");
-        info("GT30 Pro • تحسينات Android فعلية فقط، بدون تعديل ملفات PUBG أو تعطيل الحماية الحرارية.");
-        info("وضع ثبات الاشتباكات يخفّف حمل الرسومات ويخفض Boost المرتفع السابق للمعالج وGPU. بدون مراقبة مستمرة أو تعديل ملفات PUBG.");
-        action("ثبات الاشتباكات 120FPS — دقة 90%",()->confirmCombatProfile(90));
-        action("تخفيف أقوى للاشتباكات — دقة 85%",()->confirmCombatProfile(85));
-        action("إيقاف التحسينات واستعادة إعدادات الجهاز",this::confirmRestore);
+        heading("YRC GAMING PRO 5.0 • SESSION");
+        info("جلسة لعب تنافسية بضغطة واحدة: 120Hz + تحسين ترددات معتدل + دقة 90% + اتصال Wi-Fi منخفض التأخير + تشغيل PUBG. لا تعديل لملفات اللعبة.");
+        action("▶ START COMPETITIVE SESSION",()->requestCompetitiveSession(90));
+        action("▶ START SUSTAINED SESSION (85%)",()->requestCompetitiveSession(85));
+        action("⟲ RESTORE ORIGINAL SETTINGS",this::restoreSessionNow);
+        info("بعد إغلاق PUBG، تحاول خدمة جلسة ظاهرة في الإشعارات استعادة الإعدادات تلقائيًا. XOS قد يوقفها؛ زر الاستعادة اليدوية دائمًا متاح.");
+        action("XArena — eSports / Bypass Charging",this::openXArena);
+        action("عدم الإزعاج خلال الجلسة (اختياري)",this::toggleDndSession);
+        info("الوضع الافتراضي 90% أنسب للاختبار الأول. خيار عدم الإزعاج لا يتفعّل إلا بموافقتك وصلاحية Android.");
+
+        heading("خيارات أداء إضافية");
+        info("هذه الخيارات منفصلة عن جلسة اللعب السريعة. استعد الإعدادات قبل استخدام ملفات أداء مختلفة.");
+        action("ثبات الاشتباكات يدويًا — دقة 90%",()->confirmCombatProfile(90));
+        action("تخفيف العرض يدويًا — دقة 85%",()->confirmCombatProfile(85));
 
         heading("01  ثبات الفريمات");
         info("الهبوط 60↔120 أثناء الحركة قد يكون من ضغط GPU أو الحرارة أو قيد اللعبة. جرّب أولًا وضع 90%، ثم 85% إذا بقي التذبذب. وضع 120Hz ليس قفلًا لفريمات PUBG.");
@@ -124,10 +136,155 @@ public class MainActivity extends Activity {
         action("ضبط TPP الواسع من PUBG رسميًا",this::showTppGuide);
 
         heading("التحكم والاستعادة");
-        action("إرجاع جميع الإعدادات المحفوظة",this::confirmRestore);
+        action("إرجاع جميع الإعدادات المحفوظة",this::restoreSessionNow);
         action("إرجاع أبعاد الشاشة المصنعية فقط",this::confirmFactoryScreenRestore);
-        action("فتح PUBG Mobile",this::launchGame);
-        info("تعديلات قابلة للاستعادة: ترددات CPU/GPU الدنيا، دقة الشاشة، 120Hz والشبكة. لا يوجد ضمان 120FPS ثابت، ولا تعديل لملفات اللعبة.");
+        action("فتح PUBG Mobile بدون تجهيز جلسة",this::launchGame);
+        info("كل جلسة قابلة للإلغاء. YRC لا يضمن 120FPS ثابتًا ولا يستطيع تغيير احتساب الضربات في سيرفر PUBG.");
+        if(SessionManager.active(this)){
+            new AlertDialog.Builder(this)
+                .setTitle("جلسة لعب غير مستعادة")
+                .setMessage("YRC ما زال لديه سجل جلسة نشطة أو استعادة غير مكتملة. إذا انتهيت من PUBG، اضغط استعادة الإعدادات. إذا كنت داخل جلسة حاليًا، اتركها.")
+                .setNegativeButton("اترك الجلسة",null)
+                .setPositiveButton("استعادة الآن",(d,w)->restoreSessionNow())
+                .show();
+        }
+    }
+
+    private void requestCompetitiveSession(int percent){
+        pendingSessionPercent=percent;
+        if(!gameInstalled()){
+            message("PUBG Mobile Global غير مثبتة؛ لم نغيّر إعدادات الجهاز.");
+            return;
+        }
+        if(SessionManager.active(this)){
+            new AlertDialog.Builder(this)
+                .setTitle("هناك جلسة نشطة")
+                .setMessage("لا يمكن تفعيل جلسة ثانية قبل استعادة الأولى. إذا انتهيت من اللعب، اضغط استعادة الإعدادات.")
+                .setNegativeButton("إغلاق",null)
+                .setPositiveButton("استعادة الآن",(d,w)->restoreSessionNow())
+                .show();
+            return;
+        }
+        if(!prefs.getBoolean("session5_consent",false)){
+            new AlertDialog.Builder(this)
+                .setTitle("YRC Competitive Session")
+                .setMessage("سيغيّر YRC إعدادات الشاشة وبعض حدود ترددات CPU/GPU وWi-Fi مع الاحتفاظ بالقيم السابقة، ثم يفتح PUBG. قد يزيد الاستهلاك أو تتغير أبعاد اللمس. ستظهر خدمة للاستعادة عند إغلاق اللعبة، لكنها ليست مضمونة إذا أوقفها XOS.\n\nلا يغيّر ملفات PUBG أو يخفي الروت أو يعطّل الحماية الحرارية.")
+                .setNegativeButton("إلغاء",null)
+                .setPositiveButton("أفهم، ابدأ",(d,w)->{
+                    prefs.edit().putBoolean("session5_consent",true).commit();
+                    checkSessionNotificationPermission();
+                }).show();
+        }else checkSessionNotificationPermission();
+    }
+
+    private void checkSessionNotificationPermission(){
+        if(android.os.Build.VERSION.SDK_INT>=33&&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                !=PackageManager.PERMISSION_GRANTED){
+            requestPermissions(new String[]{
+                android.Manifest.permission.POST_NOTIFICATIONS
+            },NOTIFICATION_REQUEST);
+        }else startCompetitiveSession(pendingSessionPercent);
+    }
+    @Override public void onRequestPermissionsResult(int requestCode,String[] names,
+                                                       int[] results){
+        super.onRequestPermissionsResult(requestCode,names,results);
+        if(requestCode!=NOTIFICATION_REQUEST)return;
+        if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED){
+            startCompetitiveSession(pendingSessionPercent);
+        }else{
+            new AlertDialog.Builder(this)
+                .setTitle("إشعارات خدمة الاستعادة")
+                .setMessage("لم تمنح التطبيق صلاحية عرض الإشعارات. يمكن بدء الجلسة، لكن قد لا يظهر إشعار الاستعادة. سيبقى زر الاستعادة اليدوي داخل YRC.")
+                .setNegativeButton("إلغاء",null)
+                .setPositiveButton("استمرار",(d,w)->startCompetitiveSession(pendingSessionPercent))
+                .show();
+        }
+    }
+
+    private void startCompetitiveSession(int percent){
+        message("جاري تجهيز جلسة اللعب وتسجيل النسخ الأصلية لإعدادات الجهاز...");
+        background(()->{
+            SessionManager.StartResult result=SessionManager.begin(
+                getApplicationContext(),percent);
+            if(!result.started){
+                message(result.report);
+                return;
+            }
+            runOnUiThread(()->{
+                try{
+                    Intent service=new Intent(this,SessionService.class)
+                        .setAction(SessionService.ACTION_START);
+                    startForegroundService(service);
+                    message(result.report+"\nسيحاول YRC إعادة إعداداتك عند انتهاء PUBG.");
+                    launchGame();
+                }catch(Exception e){
+                    background(()->{
+                        List<String> restored=SessionManager.restore(getApplicationContext());
+                        message("تعذر تفعيل خدمة الاستعادة؛ لم نبدأ اللعبة.\n"+
+                            e.getMessage()+"\n"+android.text.TextUtils.join("\n",restored));
+                    });
+                }
+            });
+        });
+    }
+
+    private void restoreSessionNow(){
+        // Stop the watcher first so it cannot race with a manual restoration.
+        stopService(new Intent(this,SessionService.class));
+        message("يتم الآن استعادة أبعاد الشاشة وأداء CPU/GPU والشبكة...");
+        background(()->{
+            List<String> result=SessionManager.restore(getApplicationContext());
+            message(android.text.TextUtils.join("\n",result));
+        });
+    }
+
+    private void openXArena(){
+        Intent x=getPackageManager().getLaunchIntentForPackage(
+            "com.transsion.gamespace.app");
+        String guide="من XArena فعّل eSports / XBOOST حسب الخيارات المتاحة، "+
+            "واضبط GT shoulder triggers من الإعدادات الرسمية. "+
+            "إذا كنت تلعب بالشاحن، راجع خيار Bypass Charging الرسمي لتخفيف حرارة البطارية. "+
+            "YRC لا يغيّر هذه الخيارات عبر أوامر غير موثوقة.";
+        if(x==null){
+            new AlertDialog.Builder(this).setTitle("فتح XArena")
+                .setMessage("لم أجد تطبيق XArena بالاسم المعروف على إصدار XOS لديك.\n\n"+guide)
+                .setPositiveButton("إغلاق",null).show();
+        }else{
+            new AlertDialog.Builder(this).setTitle("XArena — أدوات اللعب الرسمية")
+                .setMessage(guide)
+                .setNegativeButton("إلغاء",null)
+                .setPositiveButton("فتح XArena",(d,w)->{
+                    try{startActivity(x);}catch(Exception e){
+                        message("تعذر فتح XArena: "+e.getMessage());
+                    }
+                }).show();
+        }
+    }
+
+    private void toggleDndSession(){
+        boolean desired=!prefs.getBoolean(SessionManager.DND_WANTED,false);
+        prefs.edit().putBoolean(SessionManager.DND_WANTED,desired).commit();
+        if(!desired){
+            message("عدم الإزعاج خلال الجلسات القادمة: معطّل. لن نغيّر الإشعارات.");
+            return;
+        }
+        NotificationManager nm=(NotificationManager)
+            getSystemService(NOTIFICATION_SERVICE);
+        if(nm!=null&&nm.isNotificationPolicyAccessGranted()){
+            message("عدم الإزعاج: مفعّل للجلسات القادمة فقط. سيتم حفظ الحالة الأصلية واستعادتها.");
+        }else{
+            new AlertDialog.Builder(this)
+                .setTitle("صلاحية عدم الإزعاج")
+                .setMessage("لإدارة الإشعارات أثناء اللعب، تحتاج YRC إلى سماحك الرسمي من إعدادات Android. بدون الموافقة لن يغيّر الإشعارات.")
+                .setNegativeButton("ليس الآن",null)
+                .setPositiveButton("فتح إعدادات الصلاحية",(d,w)->{
+                    try{
+                        startActivity(new Intent(
+                            Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS));
+                    }catch(Exception e){message("تعذر فتح إعدادات عدم الإزعاج.");}
+                }).show();
+        }
     }
 
     private int dp(int v){return Math.round(getResources().getDisplayMetrics().density*v);}
