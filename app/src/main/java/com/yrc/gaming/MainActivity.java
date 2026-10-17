@@ -91,13 +91,15 @@ public class MainActivity extends Activity {
         scroll.addView(main);
         frame.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
 
-        heading("YRC CLEAN 3.2 • 119/120");
-        info("GT30 Pro • PUBG Mobile • أربعة أقسام فقط، بدون تعديل ملفات اللعبة أو تجاوز حدود الحرارة.");
+        heading("YRC GAMING PRO 4.0 • BOOST");
+        info("GT30 Pro • تحسينات Android فعلية فقط، بدون تعديل ملفات PUBG أو تعطيل الحماية الحرارية.");
+        info("التعديل المتقدم يرفع الحد الأدنى لتردد CPU/GPU عندما تسمح النواة، مع 120Hz وWi-Fi Low Latency. قد يزيد الحرارة والبطارية ولا يضمن 119FPS ثابتًا.");
+        action("تفعيل YRC COMPETITIVE BOOST",this::confirmCompetitiveBoost);
+        action("إيقاف BOOST واستعادة الإعدادات",this::confirmRestore);
 
         heading("01  ثبات الفريمات");
         info("نفس إعداد 120Hz الذي اقترب معك سابقًا من 119FPS. وضع Game Mode غير مدعوم للعبة على جهازك؛ سيتم تجاوزه إن رفضه XOS. لا نغيّر حد التحديث الأدنى الديناميكي ولا نضمن قفل FPS.");
         action("تفعيل وضع ثبات 120FPS",()->background(this::applyFpsProfile));
-        action("فحص إعداد الفريمات والحرارة",()->background(this::checkFpsProfile));
 
         heading("02  تحسين الرسومات");
         info("جودة الشاشة من Android فقط. جودة الخامات وHDR والفريمات الحقيقية تختارها من قائمة PUBG الرسمية.");
@@ -109,21 +111,21 @@ public class MainActivity extends Activity {
         info("وضع Wi-Fi Low Latency رسمي من Android قد يقلّل التأخير إذا دعمه XOS. يزيد استهلاك البطارية ولا يعمل على بيانات الجوال. الاختبار ليس قياسًا لسيرفر PUBG.");
         action("تفعيل Wi-Fi Low Latency (تجريبي)",()->background(()->setLowLatency(true)));
         action("إلغاء Wi-Fi Low Latency",()->background(()->setLowLatency(false)));
-        action("اختبار البنق والتذبذب (10 محاولات)",()->background(this::checkNetwork));
         action("فتح إعدادات Wi-Fi والشبكة",()->{
             try{startActivity(new Intent(Settings.ACTION_WIFI_SETTINGS));}
             catch(Exception e){message("تعذّر فتح إعدادات الشبكة: "+e.getMessage());}
         });
 
         heading("04  منظور PC");
-        info("عرض شاشة Android بنسبة 16:9 شبيه بالشاشات العريضة، ولا يغيّر مجال رؤية كاميرا اللعبة FOV الحقيقي.");
-        action("تفعيل شاشة 16:9 (منظور PC)",()->confirmPcRatio());
+        info("عرض PC 16:9 أو 16:10 لتجربة إطار أكثر إحكامًا. قد يتغير حجم اللاعب على الشاشة، لكن لا يوجد ضمان لإظهار جسمه كاملًا؛ ضبط بُعد كاميرا TPP الحقيقي من خيارات PUBG الرسمية فقط.");
+        action("منظور PC كلاسيكي 16:9",()->confirmPcRatio());
+        action("منظور PC 16:10 — مساحة أصغر للتجربة",()->confirmPcCompact());
         action("ضبط TPP الواسع من PUBG رسميًا",this::showTppGuide);
 
         heading("التحكم والاستعادة");
         action("إرجاع إعدادات الشاشة والفريمات الأصلية",()->confirmRestore());
         action("فتح PUBG Mobile",this::launchGame);
-        info("تعديلات النظام قابلة للاستعادة. لا توجد أدوات GFX/MAX أو Injection أو تعديل ملفات PUBG في هذه النسخة.");
+        info("زر الاستعادة يرجع إعدادات CPU/GPU التي حفظها التطبيق ودقة الشاشة وتحديثها والشبكة. قد يرفض XOS بعض إعدادات النواة. لا توجد تغييرات على ملفات اللعبة.");
     }
 
     private int dp(int v){return Math.round(getResources().getDisplayMetrics().density*v);}
@@ -240,6 +242,87 @@ public class MainActivity extends Activity {
             return true;
         }catch(Exception e){return false;}
     }
+    private void confirmCompetitiveBoost(){
+        new AlertDialog.Builder(this)
+            .setTitle("YRC Competitive Boost")
+            .setMessage("سينفّذ تغييرات فعلية بنظام Android:\n"+
+                "• طلب 120Hz وإيقاف توفير الطاقة.\n"+
+                "• رفع محدود وقابل للاستعادة للحد الأدنى لتردد CPU/GPU إذا دعمته النواة.\n"+
+                "• دقة شاشة 95% لتخفيف الحمل، مع الحفاظ على منظور PC إذا كان مفعّلًا.\n"+
+                "• طلب Wi-Fi Low Latency عند الاتصال بالواي فاي.\n\n"+
+                "قد يزيد استهلاك البطارية والحرارة أو يُرفض بعض التغييرات. لا يتجاوز الحدود الحرارية ولا يعدّل ملفات PUBG. استخدم زر الاستعادة بعد اللعب.")
+            .setNegativeButton("إلغاء",null)
+            .setPositiveButton("تفعيل",(d,w)->background(this::applyCompetitiveBoost))
+            .show();
+    }
+    private void applyCompetitiveBoost(){
+        ArrayList<String> report=new ArrayList<>();
+        try{
+            rootReady();
+            if(tooHot()){
+                message("حرارة الجهاز مرتفعة. لم يبدأ Competitive Boost حفاظًا على الجهاز.");
+                return;
+            }
+            // A single session changes only whitelisted Android sysfs and settings.
+            report.add("YRC Competitive Boost — النتيجة الفعلية");
+            try{
+                changeSetting("system","tran_refresh_mode","120");
+                changeSetting("system","peak_refresh_rate","120.0");
+                changeSetting("global","low_power","0");
+                report.add("الشاشة: XOS="+readSetting("system","tran_refresh_mode")+
+                    " | peak="+readSetting("system","peak_refresh_rate"));
+                if(prefs.contains(prefName("system","min_refresh_rate"))){
+                    undoSetting("system","min_refresh_rate",report);
+                }
+            }catch(Exception e){report.add("الشاشة: تعذر أحد التغييرات: "+e.getMessage());}
+
+            // CPU/GPU floor on *documented* frequency nodes, no voltage/thermal/governor hacks.
+            KernelBoost kernel=new KernelBoost(prefs);
+            report.addAll(kernel.apply());
+
+            // 95% Android screen resolution only; preserve PC aspect if set.
+            if(prefs.contains("clean_pc_ratio")){
+                report.add("الرسومات: احتفظنا بنسبة PC "+prefs.getString("clean_pc_ratio","")+
+                    " حتى لا يتغير المنظور. لخفض الدقة يمكنك اختيار 95% يدويًا.");
+            }else{
+                try{
+                    String[] dims=physicalSize(currentSize()).split("x");
+                    int a=Integer.parseInt(dims[0]),b=Integer.parseInt(dims[1]);
+                    int x=Math.max(480,((int)Math.round(a*.95)/2)*2);
+                    int y=Math.max(800,((int)Math.round(b*.95)/2)*2);
+                    saveOldSize();
+                    root("wm size "+x+"x"+y);
+                    report.add("دقة Android: "+x+"x"+y+" (95% من البكسلات الطولية والعرضية).");
+                }catch(Exception e){report.add("تخفيف الدقة: غير متاح "+e.getMessage());}
+            }
+            try{
+                ConnectivityManager cm=(ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
+                Network n=cm==null?null:cm.getActiveNetwork();
+                NetworkCapabilities caps=n==null||cm==null?null:cm.getNetworkCapabilities(n);
+                if(caps!=null&&caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)){
+                    String output=root("cmd wifi force-low-latency-mode enabled");
+                    String lowered=output.toLowerCase(Locale.US);
+                    if(lowered.contains("error")||lowered.contains("failed")||
+                        lowered.contains("not supported")||lowered.contains("unknown")||
+                        lowered.contains("exception")||lowered.contains("usage")){
+                        report.add("Wi-Fi Low Latency: رفضه XOS — "+output);
+                    }else{
+                        prefs.edit().putBoolean("clean_wifi_latency_on",true).commit();
+                        report.add("Wi-Fi Low Latency: تم إرسال طلب التفعيل.");
+                    }
+                }else report.add("Wi-Fi Low Latency: لم يفعّل؛ الاتصال الحالي ليس Wi-Fi.");
+            }catch(Exception e){report.add("Wi-Fi Low Latency: تعذر الطلب "+e.getMessage());}
+
+            report.add("لا تعديل لملفات PUBG. تفعيل 120Hz لا يعني ضمان 120FPS.");
+            report.add("عند الانتهاء اضغط «إيقاف BOOST واستعادة الإعدادات».");
+            message(android.text.TextUtils.join("\n",report));
+        }catch(Exception e){
+            report.add("تعذر تنفيذ Boost: "+e.getMessage());
+            report.add("قد تكون تغييرات جزئية قد نُفذت؛ استعد إعدادات النظام من الزر.");
+            message(android.text.TextUtils.join("\n",report));
+        }
+    }
+
     private void applyFpsProfile(){
         try{
             rootReady();
@@ -361,14 +444,40 @@ public class MainActivity extends Activity {
         if(percent!=95&&percent!=100){
             message("ملف دقة غير معروف.");return;
         }
+        prefs.edit().remove("clean_pc_ratio").commit();
         setRelativeScreen(percent,false);
     }
+    private void confirmPcCompact(){
+        new AlertDialog.Builder(this)
+            .setTitle("منظور PC 16:10 — تجربة")
+            .setMessage("هذا الخيار يقلّل مساحة عرض Android أكثر من 16:9، وقد يغيّر طريقة عرض اللاعب لكن لا يغيّر بعد الكاميرا أو FOV داخل PUBG. إذا ظهرت أشرطة أو تغير اللمس، اضغط استعادة. هل تريد التجربة؟")
+            .setNegativeButton("إلغاء",null)
+            .setPositiveButton("تفعيل",(d,w)->background(()->applyPcAspect(16,10)))
+            .show();
+    }
+    private void applyPcAspect(int width,int height){
+        try{
+            if(width!=16||(height!=9&&height!=10))throw new IOException("Unsupported PC aspect");
+            rootReady();
+            String[] physical=physicalSize(currentSize()).split("x");
+            int shortest=Math.min(Integer.parseInt(physical[0]),Integer.parseInt(physical[1]));
+            int longest=(int)Math.round(shortest*width/(double)height);
+            longest-=longest%2;
+            saveOldSize();
+            root("wm size "+shortest+"x"+longest);
+            prefs.edit().putString("clean_pc_ratio","16:"+height).commit();
+            message("تم تغيير شاشة Android إلى PC "+width+":"+height+
+                " ("+shortest+"x"+longest+").\nقد تظهر أشرطة أو يتغير حجم اللاعب، ولا يمكن ضمان إظهار الجسم كاملًا لأن زاوية كاميرا PUBG لا تتغير.\n"+
+                "من داخل اللعبة اختر أقصى TPP Camera View رسميًا. للاستعادة اضغط زر إيقاف BOOST.");
+        }catch(Exception e){message("تعذر تطبيق شاشة PC: "+e.getMessage());}
+    }
+
     private void confirmPcRatio(){
         new AlertDialog.Builder(this)
             .setTitle("تجربة عرض 16:9")
             .setMessage("يغيّر نسبة أبعاد شاشة Android مؤقتًا ولا يفتح FOV حقيقيًا داخل اللعبة. قد يظهر شريط أسود أو تتغير أماكن أزرار اللمس. هل تريد التطبيق؟")
             .setNegativeButton("إلغاء",null)
-            .setPositiveButton("تطبيق",(d,w)->background(()->setRelativeScreen(100,true)))
+            .setPositiveButton("تطبيق",(d,w)->background(()->applyPcAspect(16,9)))
             .show();
     }
     private void showGraphicsGuide(){
@@ -462,7 +571,7 @@ public class MainActivity extends Activity {
     private void confirmRestore(){
         new AlertDialog.Builder(this)
             .setTitle("استعادة إعدادات النظام")
-            .setMessage("يعيد خيارات دقة عرض Android ومعدل التحديث وتوفير الطاقة المحفوظة بواسطة هذا التطبيق، ويطلب Game Mode القياسي إن سبق تغيير الوضع. لا يلمس أي ملف من ملفات PUBG. هل تريد الاستعادة؟")
+            .setMessage("سيحاول إرجاع الحد الأدنى الأصلي لتردد CPU/GPU، ودقة Android، وتحديث الشاشة، وتوفير الطاقة، وWi-Fi Low Latency. لا يلمس PUBG. بعض قيم النواة قد تعود تلقائيًا بعد إعادة التشغيل. هل تريد الاستعادة؟")
             .setNegativeButton("إلغاء",null)
             .setPositiveButton("استعادة",(d,w)->background(this::restoreAll))
             .show();
@@ -471,6 +580,7 @@ public class MainActivity extends Activity {
         try{
             rootReady();
             ArrayList<String> out=new ArrayList<>();
+            out.addAll(new KernelBoost(prefs).restore());
             String original=prefs.getString("clean_original_wm",null);
             if(original!=null){
                 try{
@@ -478,7 +588,7 @@ public class MainActivity extends Activity {
                         .compile("Override size:\\s*(\\d+x\\d+)").matcher(original);
                     if(m.find())root("wm size "+m.group(1));
                     else root("wm size reset");
-                    prefs.edit().remove("clean_original_wm").commit();
+                    prefs.edit().remove("clean_original_wm").remove("clean_pc_ratio").commit();
                     out.add("مقاس شاشة Android: تم استعادته.");
                 }catch(Exception e){out.add("فشل استعادة المقاس: "+e.getMessage());}
             }
