@@ -80,6 +80,8 @@ public class MainActivity extends Activity {
     title("تحليل رسومات PUBG 4.6.0");
     label("قراءة فقط لملف UserCustom.ini وفك CVars دون تعديل ملفات اللعبة.");
     button("تحليل إعدادات PUBG 4.6.0",()->run(()->analyzePubgConfig()));
+    button("نسخ ملف PUBG الأصلي احتياطيًا (روت)",()->run(()->backupPubgConfig()));
+    button("تجهيز معاينة رسومات PUBG التجريبية",()->run(()->previewPubgGraphics()));
     title("التحكم");
     button("تطبيق التحسينات وتشغيل ببجي",()->{final int selected=profiles.getCheckedRadioButtonId();final boolean net=network.isChecked(),vis=visual.isChecked(),input=touch.isChecked(),guide=pcView.isChecked();run(()->applyAndLaunch(selected,net,vis,input,guide));});
     button("استعادة إعدادات النظام",()->run(()->restore()));
@@ -384,6 +386,42 @@ public class MainActivity extends Activity {
     try{root("cmd power set-fixed-performance-mode-enabled false");}catch(Exception ignored){}
     prefs.edit().putBoolean("strong_mode",false).commit();
     message(android.text.TextUtils.join(String.valueOf((char)10),logs));
+  }
+  private String pubgIniPath(){
+    return "/sdcard/Android/data/com.tencent.ig/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/Config/Android/UserCustom.ini";
+  }
+  private void backupPubgConfig(){
+    try{
+      root("id");
+      String src=pubgIniPath();
+      String dst="/sdcard/Download/YRC-PUBG-UserCustom-backup.ini";
+      root("test -f '"+src+"' && cp -p '"+src+"' '"+dst+"'");
+      String size=root("wc -c < '"+dst+"'").trim();
+      message("تم حفظ نسخة احتياطية من إعدادات PUBG في:\\n"+dst+"\\nالحجم: "+size+" بايت\\nلم يتم تعديل ملف اللعبة.");
+    }catch(Exception e){message("تعذر إنشاء النسخة الاحتياطية: "+e.getMessage());}
+  }
+  private void previewPubgGraphics(){
+    try{
+      String raw=root("cat '"+pubgIniPath()+"'");
+      StringBuilder out=new StringBuilder("معاينة إعدادات PUBG الحالية (قراءة فقط):\\n");
+      int found=0;
+      for(String line:raw.split("\\r?\\n")){
+        if(!line.startsWith("+CVars="))continue;
+        String hex=line.substring(7).trim();
+        if(hex.length()%2!=0||!hex.matches("[0-9A-Fa-f]+"))continue;
+        StringBuilder d=new StringBuilder();
+        for(int i=0;i<hex.length();i+=2){
+          int ch=Integer.parseInt(hex.substring(i,i+2),16)^0x79;
+          d.append(ch>=32&&ch<=126?(char)ch:'?');
+        }
+        String value=d.toString();
+        if(value.matches("(?i).*(quality|resolution|scale|shadow|msaa|fps|frame|texture|render).*")){
+          if(found++<25)out.append(value).append('\\n');
+        }
+      }
+      out.append("\\nالنتيجة: ").append(found).append(" إعدادًا ذا صلة. لا يمكن ضمان 4K أو 240FPS من CVars.");
+      message(out.toString());
+    }catch(Exception e){message("تعذرت معاينة إعدادات PUBG: "+e.getMessage());}
   }
   private void analyzePubgConfig(){
     String path="/sdcard/Android/data/com.tencent.ig/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/Config/Android/UserCustom.ini";
