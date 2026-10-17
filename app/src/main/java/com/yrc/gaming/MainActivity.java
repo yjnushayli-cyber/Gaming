@@ -37,6 +37,7 @@ public class MainActivity extends Activity {
     title("YRC | محرك الألعاب");
     label("إنفينكس GT30 Pro • ببجي موبايل");
     status=label("اختر ملف الأداء ثم اضغط تطبيق. التغييرات على النظام فقط، وليست على ملفات اللعبة.");
+    button("فحص صلاحية الروت في KernelSU Next",()->run(()->diagnoseRootAccess()));
     title("ملفات الأداء");
     profiles=new RadioGroup(this);
     profiles.setOrientation(RadioGroup.VERTICAL);
@@ -118,12 +119,63 @@ public class MainActivity extends Activity {
   private void run(Runnable r){executor.execute(r);}
   private void message(String msg){runOnUiThread(()->status.setText(msg));}
   private String root(String cmd)throws Exception{
-    java.lang.Process p=new ProcessBuilder("su","-c",cmd).redirectErrorStream(true).start();
-    ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] buf=new byte[1024];int n;
-    try(InputStream in=p.getInputStream()){while((n=in.read(buf))!=-1){if(out.size()>16000)break;out.write(buf,0,n);}}
-    int code=p.waitFor();String text=out.toString("UTF-8").trim();
-    if(code!=0)throw new IOException("رمز "+code+": "+text);
-    return text;
+    String[] suPaths={"su","/system/bin/su","/system/xbin/su","/sbin/su","/su/bin/su"};
+    IOException launchFailure=null;
+    for(String suPath:suPaths){
+      if(!"su".equals(suPath)&&!new java.io.File(suPath).exists())continue;
+      java.lang.Process p;
+      try{
+        p=new ProcessBuilder(suPath,"-c",cmd).redirectErrorStream(true).start();
+      }catch(IOException error){
+        launchFailure=error;
+        continue;
+      }
+      ByteArrayOutputStream out=new ByteArrayOutputStream();
+      byte[] buf=new byte[1024];int n;
+      try(InputStream in=p.getInputStream()){
+        while((n=in.read(buf))!=-1){
+          if(out.size()<16000)out.write(buf,0,Math.min(n,16000-out.size()));
+        }
+      }
+      int code=p.waitFor();
+      String result=out.toString("UTF-8").trim();
+      if(code!=0){
+        throw new IOException("تم تشغيل su لكن الأمر رُفض (رمز "+code+"). "+result+
+          "\nراجع تصريح YRC Gaming Pro في KernelSU Next > Superuser.");
+      }
+      return result;
+    }
+    throw new IOException("تعذر تشغيل su من التطبيق (Permission denied / غير متاح)."+
+      "\nافتح KernelSU Next > Superuser > YRC Gaming Pro (com.yrc.gaming) وفعّل صلاحية الروت."+
+      "\nإذا لم يظهر التطبيق في القائمة، افتح YRC واضغط فحص صلاحية الروت."+
+      (launchFailure==null?"":"\nالسبب التقني: "+launchFailure.getMessage()));
+  }
+  private void diagnoseRootAccess(){
+    StringBuilder report=new StringBuilder("فحص صلاحية الروت لـ YRC Gaming Pro\n"+
+      "الحزمة: "+getPackageName()+"\nUID: "+android.os.Process.myUid()+"\n");
+    try{
+      java.lang.Process probe=new ProcessBuilder("/system/bin/sh","-c",
+        "command -v su 2>/dev/null || true; for p in /system/bin/su /system/xbin/su /sbin/su /su/bin/su; do if [ -e \"$p\" ]; then ls -l \"$p\"; fi; done")
+        .redirectErrorStream(true).start();
+      ByteArrayOutputStream out=new ByteArrayOutputStream();
+      byte[] buf=new byte[512];int n;
+      try(InputStream in=probe.getInputStream()){
+        while((n=in.read(buf))!=-1){
+          if(out.size()<2200)out.write(buf,0,Math.min(n,2200-out.size()));
+        }
+      }
+      probe.waitFor();
+      report.append("المسارات:\n").append(out.toString("UTF-8").trim()).append("\n");
+    }catch(Exception e){
+      report.append("فحص المسارات تعذر: ").append(e.getMessage()).append("\n");
+    }
+    try{
+      String uid=root("id -u").trim();
+      report.append("اختبار su: ").append("0".equals(uid)?"صلاحية الروت تعمل":"لم نحصل على UID 0: "+uid);
+    }catch(Exception e){
+      report.append("اختبار su فشل:\n").append(e.getMessage());
+    }
+    message(report.toString());
   }
   private String pkg(){
     for(String p:PACKAGES){try{getPackageManager().getPackageInfo(p,0);return p;}catch(Exception ignored){}}
