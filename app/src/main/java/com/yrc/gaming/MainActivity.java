@@ -46,6 +46,11 @@ public class MainActivity extends Activity {
     addRadio(103,"جودة العرض — دون تعديل ملفات اللعبة");
     profiles.check(prefs.getInt("profile",101));
     layout.addView(profiles);
+    title("ملفا الرسومات والفريمات — تنفيذ فعلي");
+    label("الجودة المتوازنة: دقة الشاشة الأصلية و120Hz مطلوب. الثبات: دقة عرض 90% لتخفيف الحمل، مع إبقاء إعدادات PUBG الرسمية على Smooth و120FPS.");
+    button("تفعيل جودة متوازنة + 120FPS",()->run(()->applyGraphicsProfile(false)));
+    button("تفعيل أولوية ثبات 120FPS",()->run(()->applyGraphicsProfile(true)));
+    button("استعادة دقة العرض الأصلية",()->run(()->restoreGraphicsProfile()));
     title("التحسينات الإضافية");
     network=check("الشبكة: إبقاء Wi-Fi نشطًا أثناء اتصال الجهاز به",true);
     visual=check("العرض: إلغاء توفير الطاقة وطلب وضع الأداء",true);
@@ -237,6 +242,63 @@ public class MainActivity extends Activity {
       else report+="الاتصال بالراوتر مستقر في هذه العينة؛ قد يكون تذبذب PUBG خارج الشبكة المحلية.";
       message(report);
     }catch(Exception e){message("تعذر اختبار Wi-Fi: "+e.getMessage());}
+  }
+  private void applyGraphicsProfile(boolean stable){
+    ArrayList<String> logs=new ArrayList<>();
+    try{
+      root("id");
+      if(thermal()>=PowerManager.THERMAL_STATUS_SEVERE||temperature()>=420){
+        message("الحرارة مرتفعة؛ أوقف التطبيق التعديل حفاظًا على الجهاز.");return;
+      }
+      String current=root("wm size");
+      if(!prefs.contains("gfx_original_wm"))prefs.edit().putString("gfx_original_wm",current).commit();
+      if(!prefs.contains("gfx_old_xos"))prefs.edit().putString("gfx_old_xos",root("settings get system tran_refresh_mode")).commit();
+      if(!prefs.contains("gfx_old_peak"))prefs.edit().putString("gfx_old_peak",root("settings get system peak_refresh_rate")).commit();
+      try{root("settings put global low_power 0");logs.add("توفير الطاقة: تم إرسال طلب الإيقاف");}
+      catch(Exception e){logs.add("توفير الطاقة: تعذر تغييره");}
+      try{root("settings put system tran_refresh_mode 120");root("settings put system peak_refresh_rate 120.0");
+        logs.add("XOS: طلب 120Hz، الوضع الفعلي يتغير حسب التطبيق");}
+      catch(Exception e){logs.add("XOS: تعذر طلب 120Hz");}
+      if(stable){
+        root("wm size 1102x2448");
+        logs.add("دقة عرض Android: "+root("wm size").replace("\\n"," | "));
+        logs.add("تم تقليل عدد بكسلات العرض نحو 19% لتخفيف الحمل المحتمل؛ لا يضمن تقليل دقة رسم PUBG الداخلية.");
+      }else{
+        root("wm size reset");
+        logs.add("دقة العرض: تم إلغاء أي override (قد يؤثر على وضع PC السابق)");
+      }
+      String game=pkg();
+      if(game!=null){
+        try{String out=root("cmd game mode 2 "+game);
+          logs.add(looksLikeHelp(out)?"Game Mode غير مدعوم":"طلب وضع الأداء: أُرسل");}
+        catch(Exception e){logs.add("Game Mode: رفضه النظام");}
+      }
+      logs.add("داخل PUBG اختر Smooth + 120FPS، وأوقف Anti-Aliasing وAuto-adjust Graphics إن توفرا.");
+      logs.add("لم نعدّل ملفات اللعبة. تحقق من FPS أثناء الاشتباك.");
+      message(android.text.TextUtils.join("\\n",logs));
+    }catch(Exception e){logs.add("فشل التنفيذ: "+e.getMessage());message(android.text.TextUtils.join("\\n",logs));}
+  }
+  private void restoreGraphicsProfile(){
+    ArrayList<String> logs=new ArrayList<>();
+    try{
+      root("id");
+      String old=prefs.getString("gfx_original_wm","");
+      if(!old.isEmpty()){
+        java.util.regex.Matcher match=java.util.regex.Pattern.compile("Override size: ([0-9]+x[0-9]+)").matcher(old);
+        if(match.find())root("wm size "+match.group(1));else root("wm size reset");
+        prefs.edit().remove("gfx_original_wm").commit();
+        logs.add("تمت استعادة دقة العرض السابقة");
+      }
+      for(String[] entry:new String[][]{{"gfx_old_xos","tran_refresh_mode"},{"gfx_old_peak","peak_refresh_rate"}}){
+        if(!prefs.contains(entry[0]))continue;
+        String value=prefs.getString(entry[0],"null");
+        if("null".equals(value))root("settings delete system "+entry[1]);
+        else root("settings put system "+entry[1]+" "+value);
+        prefs.edit().remove(entry[0]).commit();
+        logs.add("استعادة "+entry[1]);
+      }
+      message(logs.isEmpty()?"لا توجد تغييرات محفوظة للاستعادة":android.text.TextUtils.join("\\n",logs));
+    }catch(Exception e){logs.add("تعذرت الاستعادة: "+e.getMessage());message(android.text.TextUtils.join("\\n",logs));}
   }
   private void applyGt30Profile(){
     ArrayList<String> logs=new ArrayList<>();
