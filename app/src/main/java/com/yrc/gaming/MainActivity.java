@@ -52,8 +52,15 @@ public class MainActivity extends Activity {
     button("تفعيل جودة متوازنة + 120FPS",()->run(()->applyGraphicsProfile(false)));
     button("تفعيل أولوية ثبات 120FPS",()->run(()->applyGraphicsProfile(true)));
     button("استعادة دقة العرض الأصلية",()->run(()->restoreGraphicsProfile()));
+    title("حل رجوع إعدادات الرسومات بعد تشغيل PUBG");
+    label("بعد اختبار جهازك تبيّن أن حفظ CVars في الملف لا يضمن تطبيقها أو استمرارها. الخيار المستقر هو استعادة الملف وضبط الجودة من داخل PUBG.");
+    button("استعادة رسومات PUBG وفتح اللعبة للإعدادات الرسمية",()->new AlertDialog.Builder(this)
+      .setTitle("استعادة ملف الرسومات الأصلي")
+      .setMessage("سيعيد UserCustom.ini من نسخة YRC الاحتياطية، وقد يعيد اختيارات الرسومات السابقة. لن يحذف حسابك أو اللعبة، لكنه لا يضمن FPS. أغلق PUBG تمامًا قبل المتابعة.")
+      .setNegativeButton("إلغاء",null)
+      .setPositiveButton("استعادة",(d,w)->run(()->restoreIniAndOfferGraphics())).show());
     title("تحسين الرسومات داخل ملف PUBG — تجريبي");
-    label("يرفع دقة الرندر الداخلية بنسبة 10% فقط إذا كان الإعداد موجودًا. قد يخفض FPS أو تعيد اللعبة ضبطه؛ لا يرفع دقة الشاشة إلى 4K. أغلق PUBG أولًا.");
+    label("تعديلات غير رسمية للملف. في اختبارك عادت إعدادات التفاصيل بعد اللعب؛ نجاح كتابة CVars لا يعني اعتمادها في المحرك. قد تتجاهلها PUBG وقد يتأثر الحساب. جرّب الخيار الرسمي بالأعلى أولًا.");
     button("تطبيق تحسين وضوح 10% داخل UserCustom.ini",()->new AlertDialog.Builder(this).setTitle("تعديل ملف رسومات PUBG").setMessage("سيُنشئ التطبيق نسخة احتياطية ثم يرفع r.MobileContentScaleFactor من 1 إلى 1.1 إن كانت القيمة موجودة. هذا تعديل غير رسمي وقد لا تقبله اللعبة أو قد يعرّض الحساب للقيود. أغلق PUBG قبل المتابعة.").setNegativeButton("إلغاء",null).setPositiveButton("تطبيق", (d,w)->run(()->applyIniClarity())).show());
     button("وضوح أعلى 15% — تعديل داخل PUBG",()->confirmIniQuality("1.15"));
     button("وضوح أعلى 25% — تجريبي ثقيل",()->confirmIniQuality("1.25"));
@@ -574,7 +581,7 @@ public class MainActivity extends Activity {
         message("فشل التحقق من التعديل؛ تمت محاولة استعادة الملف الأصلي.");return;
       }
       root("rm -f '"+temp+"'");
-      message("تمت كتابة قيمة الرندر "+scale+" والتحقق من الملف. نسخة الاستعادة: "+backup+"\nالحد الرسمي 120FPS لم يتغير. جرّب FPS وجودة الصورة؛ قد تتجاهل اللعبة القيمة.");
+      message("تمت كتابة قيمة الرندر "+scale+" والتحقق من الملف فقط، وليس من تطبيقها داخل PUBG. نسخة الاستعادة: "+backup+"\nقد تعيد اللعبة الإعداد أو تتجاهله. الحد الرسمي 120FPS لم يتغير.");
     }catch(Exception e){message("تعذر تعديل PUBG عند «"+stage+"»: "+e.getMessage());}
   }
   private void confirmIniDetails(){
@@ -743,6 +750,36 @@ public class MainActivity extends Activity {
         "نسخة استعادة YRC: "+("YES".equals(originalBackup)?"موجودة":"غير موجودة")+
         "\n\n"+assessment+"\nلن أرفع الجودة أكثر قبل التأكد من قبول اللعبة للتعديل.");
     }catch(Exception e){message("تعذر فحص رسومات PUBG بعد اللعب: "+e.getMessage());}
+  }
+  private void restoreIniAndOfferGraphics(){
+    try{
+      root("id");
+      if(!root("pidof com.tencent.ig 2>/dev/null || true").trim().isEmpty()){
+        message("أغلق PUBG بالكامل قبل استعادة ملف الرسومات.");return;
+      }
+      String backup=iniBackupPath(),path=pubgIniPath();
+      String state=root("if [ -s '"+backup+"' ]; then echo READY; else echo MISSING; fi");
+      if(!"READY".equals(state)){
+        message("لم أجد نسخة استعادة من YRC. افتح PUBG واستخدم «إعادة ضبط الرسومات» من إعدادات اللعبة.");
+        runOnUiThread(()->showOfficialGraphicsGuide());
+        return;
+      }
+      // Restore only the known graphics file, then verify byte-for-byte via SHA256.
+      root("cat '"+backup+"' > '"+path+"'");
+      String expected=root("sha256sum '"+backup+"'").trim().split(" ")[0];
+      String actual=root("sha256sum '"+path+"'").trim().split(" ")[0];
+      if(!expected.equalsIgnoreCase(actual)){
+        message("فشل التحقق من استعادة UserCustom.ini. لا تجرّب تعديلًا جديدًا قبل فحص الملف.");return;
+      }
+      message("تمت استعادة UserCustom.ini من نسخة YRC وتأكيد تطابق الملف. اضبط جودة PUBG من القائمة الرسمية.");
+      runOnUiThread(()->showOfficialGraphicsGuide());
+    }catch(Exception e){message("تعذرت استعادة إعدادات PUBG: "+e.getMessage());}
+  }
+  private void showOfficialGraphicsGuide(){
+    new AlertDialog.Builder(this).setTitle("ضبط رسومات PUBG 4.6.0")
+      .setMessage("لأعلى FPS مع تحسين الوضوح:\n1. الإعدادات ← الرسومات الجرافيكية ← القتال.\n2. جرّب «سلسة» بدل «سلاسة فائقة».\n3. إن بقي خيار «ألترا إكستريم» متاحًا، اختر 120FPS.\n4. جرّب تنعيم الحواف 2x إن سمحت اللعبة، وأبقِ الظلال والتكيف معطّلين.\n5. لو اختفى 120FPS، ارجع إلى «سلاسة فائقة» أو اختر معدل الإطارات الأعلى المتاح.\n\nلأعلى رسومات فعلية: اختر «متوازنة» أو «عالية الدقة» واقبل الحد الذي تعرضه اللعبة من FPS. لا يمكن ضمان شكل PC أو 4K/240FPS.")
+      .setNegativeButton("إغلاق",null)
+      .setPositiveButton("فتح PUBG",(d,w)->launchGame()).show();
   }
   private void restoreIniClarity(){
     try{
