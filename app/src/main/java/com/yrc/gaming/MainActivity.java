@@ -469,7 +469,7 @@ public class MainActivity extends Activity {
       root("id");
       if(!root("pidof com.tencent.ig 2>/dev/null").trim().isEmpty()){message("أغلق PUBG بالكامل أولًا.");return;}
       String path=pubgIniPath(),backup=iniBackupPath();
-      String original=root("cat '"+path+"'");
+      String original=new String(android.util.Base64.decode(root("base64 '"+path+"'"),android.util.Base64.DEFAULT),java.nio.charset.StandardCharsets.UTF_8);
       if(original.length()<100||original.length()>60000){message("تعذر قراءة الملف بأمان.");return;}
       String[] lines=original.split("\n",-1);
       boolean inUser=false;int matches=0;String prior="";
