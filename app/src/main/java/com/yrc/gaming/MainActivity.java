@@ -15,6 +15,7 @@ public class MainActivity extends Activity {
   private android.content.SharedPreferences prefs;
   private TextView status;
   private LinearLayout layout;
+  private CheckBox safetyToggle;
   private final int BG=Color.rgb(12,18,29), ACCENT=Color.rgb(56,207,174);
   private final String[] PACKAGES={"com.tencent.ig","com.pubg.imobile","com.vng.pubgmobile","com.rekoo.pubgm"};
 
@@ -23,10 +24,10 @@ public class MainActivity extends Activity {
     getWindow().setStatusBarColor(BG);
     getWindow().setNavigationBarColor(BG);
     prefs=getSharedPreferences("yrc_profiles",MODE_PRIVATE);
-    // The clean edition re-enables the protection once for users upgrading from older builds.
-    if(!prefs.getBoolean("clean_v2_initialized",false)){
+    // Upgrade protection: final safe edition starts with account safety enabled once.
+    if(!prefs.getBoolean("safe_edition_22_initialized",false)){
       prefs.edit().putBoolean("account_safety_mode",true)
-        .putBoolean("clean_v2_initialized",true).commit();
+        .putBoolean("safe_edition_22_initialized",true).commit();
     }
     LinearLayout screen=new LinearLayout(this);
     screen.setOrientation(LinearLayout.VERTICAL);
@@ -62,18 +63,18 @@ public class MainActivity extends Activity {
     scroll.addView(layout);
     screen.addView(scroll,new LinearLayout.LayoutParams(-1,0,1f));
 
-    title("YRC Gaming Pro  |  Clean 2.0");
+    title("YRC Gaming Pro  |  Safe Edition 2.2");
     label("Infinix GT30 Pro • PUBG Mobile • نسخة مركزة على ما تحتاجه");
 
     title("01  |  حماية الحساب");
-    label("حماية وقائية: تمنع YRC من كتابة ملفات اللعبة، وتفحص UserCustom.ini وActive.sav قبل تشغيل PUBG من التطبيق، وتوقف التشغيل عند اكتشاف إعدادات مشبوهة. لا تخفي التعديلات عن مكافحة الغش ولا تمنع فتح اللعبة من خارج YRC.");
-    CheckBox accountSafety=new CheckBox(this);
-    accountSafety.setText("وضع الأمان — منع كتابة تعديلات في ملفات اللعبة");
-    accountSafety.setTextSize(16);
-    accountSafety.setTextColor(Color.WHITE);
-    accountSafety.setChecked(prefs.getBoolean("account_safety_mode",true));
-    layout.addView(accountSafety);
-    accountSafety.setOnCheckedChangeListener((control,checked)->{
+    label("وضع لعب آمن وقائي: لا يغيّر ملفات PUBG، ولا يخفي الروت أو التعديلات عن مكافحة الغش. يفحص الملفات قبل التشغيل ويوقف فتح اللعبة من YRC إذا وجد خطرًا أو تعذر التحقق. اللعب من خارج التطبيق لا يخضع لهذا الفحص.");
+    safetyToggle=new CheckBox(this);
+    safetyToggle.setText("وضع الأمان — منع كتابة تعديلات في ملفات اللعبة");
+    safetyToggle.setTextSize(16);
+    safetyToggle.setTextColor(Color.WHITE);
+    safetyToggle.setChecked(prefs.getBoolean("account_safety_mode",true));
+    layout.addView(safetyToggle);
+    safetyToggle.setOnCheckedChangeListener((control,checked)->{
       if(checked){
         prefs.edit().putBoolean("account_safety_mode",true).apply();
         message("وضع الأمان مفعّل. لا تُكتب تعديلات جديدة في UserCustom.ini أو Active.sav.");
@@ -81,15 +82,16 @@ public class MainActivity extends Activity {
         new AlertDialog.Builder(this)
           .setTitle("تعطيل وضع الأمان؟")
           .setMessage("هذا يتيح تعديلات GFX وMAX غير الرسمية داخل ملفات PUBG، وقد يؤدي إلى تقييد الحساب أو الجهاز. لا توجد حماية Anti-Ban مضمونة.")
-          .setNegativeButton("إبقاء الحماية",(d,w)->accountSafety.setChecked(true))
+          .setNegativeButton("إبقاء الحماية",(d,w)->safetyToggle.setChecked(true))
           .setPositiveButton("أفهم المخاطر",(d,w)->{
             prefs.edit().putBoolean("account_safety_mode",false).apply();
             message("تم تعطيل الحماية بطلبك. تعديلات الملفات غير الرسمية قد تؤدي إلى حظر الحساب.");
           })
-          .setOnCancelListener(d->accountSafety.setChecked(true))
+          .setOnCancelListener(d->safetyToggle.setChecked(true))
           .show();
       }
     });
+    button("اعتماد وضع اللعب الآمن — حماية الحساب",()->activateSafePlayMode());
     button("فحص سلامة ملفات PUBG قبل اللعب",()->run(()->preflightGameSafety(false)));
     button("تشغيل آمن بفحص الملفات أولًا",()->launchGame());
     button("إرشادات إصلاح اللعبة الرسمي",()->showOfficialRepairGuide());
@@ -820,18 +822,28 @@ public class MainActivity extends Activity {
       .setPositiveButton("فتح ببجي",(d,w)->launchGame()).show();
   }
 
+  private void activateSafePlayMode(){
+    prefs.edit().putBoolean("account_safety_mode",true).commit();
+    if(safetyToggle!=null && !safetyToggle.isChecked())safetyToggle.setChecked(true);
+    message("تم تفعيل وضع اللعب الآمن، لكن لم يتم التحقق من ملفات اللعبة بعد.");
+    new AlertDialog.Builder(this)
+      .setTitle("تفعيل وضع اللعب الآمن")
+      .setMessage("سيمنع YRC أي تعديل جديد على ملفات PUBG، وسيشترط اجتياز فحص سلامة الملفات قبل تشغيلها من YRC. إذا استخدمت MAX أو GFX سابقًا، قد تحتاج إصلاح PUBG رسميًا أولًا. هذا ليس إخفاءً للروت أو Anti-Ban مضمونًا.")
+      .setNegativeButton("إغلاق",null)
+      .setPositiveButton("افحص الملفات الآن",(d,w)->run(()->preflightGameSafety(false)))
+      .show();
+  }
   private void launchGame(){
-    if(prefs.getBoolean("account_safety_mode",true)){
-      run(()->preflightGameSafety(true));
+    if(!prefs.getBoolean("account_safety_mode",true)){
+      new AlertDialog.Builder(this)
+        .setTitle("تعديلات GFX التجريبية مفعّلة")
+        .setMessage("لن يفتح YRC PUBG دون الحماية الوقائية. تعطيل الحماية يسمح بالتعديل غير الرسمي؛ ولم نتحقق من سلامة الملفات بعد. فعّل وضع اللعب الآمن ثم نفّذ الفحص.")
+        .setNegativeButton("إلغاء",null)
+        .setPositiveButton("تفعيل وضع اللعب الآمن",(d,w)->activateSafePlayMode())
+        .show();
       return;
     }
-    new AlertDialog.Builder(this)
-      .setTitle("وضع الحماية معطّل")
-      .setMessage("أنت تستخدم تشغيلًا دون فحص سلامة ملفات اللعبة. قد تكون تعديلات MAX أو GFX السابقة موجودة وقابلة لاكتشاف PUBG. لا توجد حماية Anti-Ban تمنع العقوبات. هل تريد الفحص أولًا؟")
-      .setNegativeButton("إلغاء",null)
-      .setNeutralButton("تشغيل رغم المخاطر",(d,w)->launchPubgIntent())
-      .setPositiveButton("فحص قبل التشغيل",(d,w)->run(()->preflightGameSafety(true)))
-      .show();
+    run(()->preflightGameSafety(true));
   }
   private void launchPubgIntent(){
     String game=pkg();
