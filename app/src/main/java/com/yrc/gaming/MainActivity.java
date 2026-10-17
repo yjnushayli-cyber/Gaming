@@ -91,14 +91,15 @@ public class MainActivity extends Activity {
         scroll.addView(main);
         frame.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
 
-        heading("YRC GAMING PRO 4.2 • BOOST");
+        heading("YRC GAMING PRO 4.3 • STABILITY");
         info("GT30 Pro • تحسينات Android فعلية فقط، بدون تعديل ملفات PUBG أو تعطيل الحماية الحرارية.");
-        info("Boost يعيد فحص الترددات الحقيقية لـ CPU/GPU، ويعيد تطبيق الحد الأدنى الآمن عند زواله دون مضاعفة الرفع. قد يزيد الحرارة والبطارية، ولا يضمن 119FPS ثابتًا.");
-        action("تفعيل YRC COMPETITIVE BOOST",this::confirmCompetitiveBoost);
-        action("إيقاف BOOST واستعادة الإعدادات",this::confirmRestore);
+        info("وضع ثبات الاشتباكات يخفّف حمل الرسومات ويخفض Boost المرتفع السابق للمعالج وGPU. بدون مراقبة مستمرة أو تعديل ملفات PUBG.");
+        action("ثبات الاشتباكات 120FPS — دقة 90%",()->confirmCombatProfile(90));
+        action("تخفيف أقوى للاشتباكات — دقة 85%",()->confirmCombatProfile(85));
+        action("إيقاف التحسينات واستعادة إعدادات الجهاز",this::confirmRestore);
 
         heading("01  ثبات الفريمات");
-        info("نفس إعداد 120Hz الذي اقترب معك سابقًا من 119FPS. وضع Game Mode غير مدعوم للعبة على جهازك؛ سيتم تجاوزه إن رفضه XOS. لا نغيّر حد التحديث الأدنى الديناميكي ولا نضمن قفل FPS.");
+        info("الهبوط 60↔120 أثناء الحركة قد يكون من ضغط GPU أو الحرارة أو قيد اللعبة. جرّب أولًا وضع 90%، ثم 85% إذا بقي التذبذب. وضع 120Hz ليس قفلًا لفريمات PUBG.");
         action("تفعيل وضع ثبات 120FPS",()->background(this::applyFpsProfile));
 
         heading("02  تحسين الرسومات");
@@ -123,9 +124,10 @@ public class MainActivity extends Activity {
         action("ضبط TPP الواسع من PUBG رسميًا",this::showTppGuide);
 
         heading("التحكم والاستعادة");
-        action("إرجاع إعدادات الشاشة والفريمات الأصلية",()->confirmRestore());
+        action("إرجاع جميع الإعدادات المحفوظة",this::confirmRestore);
+        action("إرجاع أبعاد الشاشة المصنعية فقط",this::confirmFactoryScreenRestore);
         action("فتح PUBG Mobile",this::launchGame);
-        info("زر الاستعادة يرجع إعدادات CPU/GPU والشاشة والشبكة. زر تقليل الدمج الوهمي يحسّن Wi-Fi فقط ولا يستطيع تغيير قرارات إصابات PUBG من السيرفر.");
+        info("تعديلات قابلة للاستعادة: ترددات CPU/GPU الدنيا، دقة الشاشة، 120Hz والشبكة. لا يوجد ضمان 120FPS ثابت، ولا تعديل لملفات اللعبة.");
     }
 
     private int dp(int v){return Math.round(getResources().getDisplayMetrics().density*v);}
@@ -242,85 +244,105 @@ public class MainActivity extends Activity {
             return true;
         }catch(Exception e){return false;}
     }
-    private void confirmCompetitiveBoost(){
+    private void confirmCombatProfile(int percent){
+        if(percent!=90&&percent!=85)return;
         new AlertDialog.Builder(this)
-            .setTitle("YRC Competitive Boost")
-            .setMessage("سينفّذ تغييرات فعلية بنظام Android:\n"+
-                "• طلب 120Hz وإيقاف توفير الطاقة.\n"+
-                "• رفع محدود وقابل للاستعادة للحد الأدنى لتردد CPU/GPU إذا دعمته النواة.\n"+
-                "• دقة شاشة 95% لتخفيف الحمل، مع الحفاظ على منظور PC إذا كان مفعّلًا.\n"+
-                "• طلب Wi-Fi Low Latency عند الاتصال بالواي فاي.\n\n"+
-                "قد يزيد استهلاك البطارية والحرارة أو يُرفض بعض التغييرات. لا يتجاوز الحدود الحرارية ولا يعدّل ملفات PUBG. استخدم زر الاستعادة بعد اللعب.")
+            .setTitle("ثبات الاشتباكات — "+percent+"%")
+            .setMessage("لاحظت أن PUBG تتذبذب عندك بين 60 و120FPS أثناء القتال.\n\n"+
+                "سيغيّر YRC إعدادات النظام فعليًا:\n"+
+                "• تقليل أبعاد عرض Android إلى "+percent+"% من المقاس الأصلي، مع الإبقاء على نسبة PC إذا كانت مفعلة.\n"+
+                "• تخفيف الحد الأدنى العالي السابق لترددات CPU/GPU إلى مستوى معتدل قابل للاستعادة.\n"+
+                "• طلب شاشة 120Hz وإيقاف توفير الطاقة.\n\n"+
+                "الهدف تقليل ضغط الرسم والحرارة؛ لا يمكن ضمان تثبيت 120FPS ولا التحكم في FPS محرك PUBG. قد تظهر أشرطة أو تتغير أماكن اللمس.")
             .setNegativeButton("إلغاء",null)
-            .setPositiveButton("تفعيل",(d,w)->background(this::applyCompetitiveBoost))
+            .setPositiveButton("تطبيق",(d,w)->background(()->applyCombatStability(percent)))
             .show();
     }
-    private void applyCompetitiveBoost(){
+
+    private void applyCombatStability(int percent){
         ArrayList<String> report=new ArrayList<>();
+        report.add("ثبات الاشتباكات "+percent+"% — تعديلات Android الفعلية");
         try{
             rootReady();
-            if(tooHot()){
-                message("حرارة الجهاز مرتفعة. لم يبدأ Competitive Boost حفاظًا على الجهاز.");
-                return;
+            boolean hot=tooHot();
+            KernelBoost kernel=new KernelBoost(prefs);
+            if(hot){
+                // Undo elevated DVFS minima if device is already too hot.
+                report.add("حرارة الجهاز مرتفعة؛ لن نرفع ترددات CPU/GPU.");
+                report.addAll(kernel.restore());
+            }else{
+                report.addAll(kernel.applyStability());
             }
-            // A single session changes only whitelisted Android sysfs and settings.
-            report.add("YRC Competitive Boost — النتيجة الفعلية");
             try{
                 changeSetting("system","tran_refresh_mode","120");
                 changeSetting("system","peak_refresh_rate","120.0");
                 changeSetting("global","low_power","0");
-                report.add("الشاشة: XOS="+readSetting("system","tran_refresh_mode")+
-                    " | peak="+readSetting("system","peak_refresh_rate"));
-                if(prefs.contains(prefName("system","min_refresh_rate"))){
-                    undoSetting("system","min_refresh_rate",report);
-                }
-            }catch(Exception e){report.add("الشاشة: تعذر أحد التغييرات: "+e.getMessage());}
-
-            // CPU/GPU floor on *documented* frequency nodes, no voltage/thermal/governor hacks.
-            KernelBoost kernel=new KernelBoost(prefs);
-            report.addAll(kernel.apply());
-
-            // 95% Android screen resolution only; preserve PC aspect if set.
-            if(prefs.contains("clean_pc_ratio")){
-                report.add("الرسومات: احتفظنا بنسبة PC "+prefs.getString("clean_pc_ratio","")+
-                    " حتى لا يتغير المنظور. لخفض الدقة يمكنك اختيار 95% يدويًا.");
-            }else{
-                try{
-                    String[] dims=physicalSize(currentSize()).split("x");
-                    int a=Integer.parseInt(dims[0]),b=Integer.parseInt(dims[1]);
-                    int x=Math.max(480,((int)Math.round(a*.95)/2)*2);
-                    int y=Math.max(800,((int)Math.round(b*.95)/2)*2);
-                    saveOldSize();
-                    root("wm size "+x+"x"+y);
-                    report.add("دقة Android: "+x+"x"+y+" (95% من البكسلات الطولية والعرضية).");
-                }catch(Exception e){report.add("تخفيف الدقة: غير متاح "+e.getMessage());}
+                report.add("تردد الشاشة: XOS="+readSetting("system","tran_refresh_mode")+
+                    " | أعلى معدل="+readSetting("system","peak_refresh_rate")+
+                    " | حد أدنى تكيفي="+readSetting("system","min_refresh_rate"));
+            }catch(Exception e){
+                report.add("تحديث الشاشة: لم تكتمل جميع الإعدادات "+e.getMessage());
             }
+            // The target is based on the physical display so repeat presses do not
+            // compound resizing. Honor existing 16:9 / 16:10 aspect preference.
             try{
-                ConnectivityManager cm=(ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
-                Network n=cm==null?null:cm.getActiveNetwork();
-                NetworkCapabilities caps=n==null||cm==null?null:cm.getNetworkCapabilities(n);
-                if(caps!=null&&caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)){
-                    String output=root("cmd wifi force-low-latency-mode enabled");
-                    String lowered=output.toLowerCase(Locale.US);
-                    if(lowered.contains("error")||lowered.contains("failed")||
-                        lowered.contains("not supported")||lowered.contains("unknown")||
-                        lowered.contains("exception")||lowered.contains("usage")){
-                        report.add("Wi-Fi Low Latency: رفضه XOS — "+output);
-                    }else{
-                        prefs.edit().putBoolean("clean_wifi_latency_on",true).commit();
-                        report.add("Wi-Fi Low Latency: تم إرسال طلب التفعيل.");
-                    }
-                }else report.add("Wi-Fi Low Latency: لم يفعّل؛ الاتصال الحالي ليس Wi-Fi.");
-            }catch(Exception e){report.add("Wi-Fi Low Latency: تعذر الطلب "+e.getMessage());}
-
-            report.add("لا تعديل لملفات PUBG. تفعيل 120Hz لا يعني ضمان 120FPS.");
-            report.add("عند الانتهاء اضغط «إيقاف BOOST واستعادة الإعدادات».");
-            message(android.text.TextUtils.join("\n",report));
+                String[] physical=physicalSize(currentSize()).split("x");
+                int shortOriginal=Math.min(Integer.parseInt(physical[0]),Integer.parseInt(physical[1]));
+                int longOriginal=Math.max(Integer.parseInt(physical[0]),Integer.parseInt(physical[1]));
+                int shortTarget=Math.round(shortOriginal*percent/100f);
+                shortTarget=2*(shortTarget/2);
+                if(shortTarget<800)throw new IOException("الدقة المقترحة صغيرة جدًا");
+                String pc=prefs.getString("clean_pc_ratio","");
+                int longTarget;
+                if("16:9".equals(pc)){
+                    longTarget=(int)Math.round(shortTarget*16.0/9.0);
+                }else if("16:10".equals(pc)){
+                    longTarget=(int)Math.round(shortTarget*16.0/10.0);
+                }else{
+                    longTarget=(int)Math.round(longOriginal*percent/100.0);
+                }
+                longTarget=2*(longTarget/2);
+                if(longTarget<1300)throw new IOException("الارتفاع المقترح صغير جدًا");
+                saveOldSize();
+                String desired=shortTarget+"x"+longTarget;
+                root("wm size "+desired);
+                String actual=currentSize();
+                if(actual.contains("Override size: "+desired)){
+                    report.add("دقة Android: "+desired+" بدل "+shortOriginal+"x"+longOriginal+
+                        ("".equals(pc)?"":" — منظور PC "+pc+" محفوظ."));
+                    report.add("هذه دقة عرض النظام وليست تأكيدًا لتغيّر دقة محرك PUBG الداخلية.");
+                }else{
+                    report.add("أرسلنا أمر الدقة "+desired+" لكن XOS لم يؤكد تطبيقه: "+actual);
+                }
+            }catch(Exception e){
+                report.add("تخفيف عبء العرض لم يكتمل: "+e.getMessage());
+            }
+            report.add("الأفضل من داخل PUBG: Smooth + أعلى FPS رسمي متاح، مع XArena eSports إذا توفر.");
+            report.add("إذا استمر التذبذب إلى 60FPS، قد تكون اللعبة أو XOS تفرض الحد؛ لا يمكن إجبارهما دون تعديل اللعبة.");
+            report.add("بعد اللعب: استخدم زر الاستعادة. وإذا اضطرب العرض، زر «أبعاد الشاشة المصنعية» يعيدها فورًا.");
         }catch(Exception e){
-            report.add("تعذر تنفيذ Boost: "+e.getMessage());
-            report.add("قد تكون تغييرات جزئية قد نُفذت؛ استعد إعدادات النظام من الزر.");
-            message(android.text.TextUtils.join("\n",report));
+            report.add("تعذر تطبيق وضع الاشتباكات: "+e.getMessage());
+            report.add("قد تكون هناك تغييرات جزئية؛ استخدم زر الاستعادة.");
         }
+        message(android.text.TextUtils.join("\n",report));
+    }
+
+    private void confirmFactoryScreenRestore(){
+        new AlertDialog.Builder(this)
+            .setTitle("إرجاع أبعاد الشاشة المصنعية")
+            .setMessage("يعيد مقاس الشاشة إلى قيمة المصنع عبر Android. يلغي 16:9 و16:10 وتخفيف الدقة فقط، دون مساس بترددات CPU/GPU أو ملفات PUBG. هل تريد الاستعادة؟")
+            .setNegativeButton("إلغاء",null)
+            .setPositiveButton("استعادة",(d,w)->background(this::restoreFactoryScreen))
+            .show();
+    }
+    private void restoreFactoryScreen(){
+        try{
+            rootReady();
+            root("wm size reset");
+            prefs.edit().remove("clean_original_wm").remove("clean_pc_ratio").commit();
+            message("تم طلب إعادة أبعاد الشاشة إلى إعداد المصنع.\n"+currentSize()+
+                "\nإذا ظل العرض غير طبيعي، أعد تشغيل الجهاز. لم تُعدّل ملفات PUBG.");
+        }catch(Exception e){message("فشل إرجاع دقة المصنع: "+e.getMessage());}
     }
 
     private void applyFpsProfile(){
