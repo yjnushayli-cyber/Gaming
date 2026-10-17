@@ -52,6 +52,10 @@ public class MainActivity extends Activity {
     button("تفعيل جودة متوازنة + 120FPS",()->run(()->applyGraphicsProfile(false)));
     button("تفعيل أولوية ثبات 120FPS",()->run(()->applyGraphicsProfile(true)));
     button("استعادة دقة العرض الأصلية",()->run(()->restoreGraphicsProfile()));
+    title("MAX Graphics — رسومات ثقيلة قريبة من PC (تجريبي)");
+    label("أعلى تجربة بصرية داخل الملف: رندر 1.50 + ظلال محسّنة + تفاصيل المباني والأشجار والخامات. هذا ليس 4K ولا رسومات PC الحقيقية، وقد تهبط الفريمات بقوة. أغلق PUBG أولًا.");
+    button("تطبيق MAX Graphics من داخل UserCustom.ini",()->confirmMaxGraphics());
+    button("فحص ثبات قيم MAX بعد اللعب",()->run(()->verifyIniQualityAfterGame()));
     title("تعديل الرندر والتفاصيل بضغطة واحدة — PUBG");
     label("ملف موحد: رندر 1.15 + 6 إعدادات تفاصيل وخامات من إعدادات اللعبة الاحتياطية. يُكتب إلى UserCustom فقط، وليس إلى Android. لا يضمن استمرار القيم بعد تشغيل اللعبة.");
     button("تطبيق رندر 1.15 + تفاصيل أعلى داخل PUBG",()->confirmCombinedIniGraphics());
@@ -698,6 +702,152 @@ public class MainActivity extends Activity {
         "للتراجع استخدم زر استعادة ملف رسومات PUBG الأصلي.");
     }catch(Exception e){message("فشل وضع التفاصيل عند «"+stage+"»: "+e.getMessage());}
   }
+  private java.util.LinkedHashMap<String,String> maxGraphicsValues(){
+    java.util.LinkedHashMap<String,String> d=new java.util.LinkedHashMap<>();
+    d.put("r.MobileContentScaleFactor","1.5");
+    d.put("r.DetailMode","2");
+    d.put("r.MaterialQualityLevel","1");
+    d.put("r.Streaming.PoolSize","512");
+    d.put("r.StaticMeshLODDistanceScale","0.6");
+    d.put("foliage.LODDistanceScale","1.5");
+    d.put("r.ParticleLODBias","0");
+    d.put("fx.NiagaraLODBias","0");
+    d.put("r.IndividualParticleLODBias","0");
+    d.put("r.EmitterSpawnRateScale","1");
+    d.put("r.MaxAnisotropy","16");
+    d.put("r.UserShadowSwitch","1");
+    d.put("r.ShadowQuality","2");
+    d.put("r.Shadow.MaxCSMResolution","2048");
+    d.put("r.Shadow.CSM.MaxMobileCascades","2");
+    d.put("r.Shadow.DistanceScale","1");
+    d.put("r.Mobile.DynamicObjectShadow","1");
+    d.put("r.MobileNumDynamicPointLights","1");
+    return d;
+  }
+  private java.util.HashMap<String,String> maxDefaultGraphicsValues(){
+    java.util.HashMap<String,String> d=new java.util.HashMap<>();
+    d.put("r.MobileContentScaleFactor","1,1.0,1.1,1.15,1.25,1.5");
+    d.put("r.DetailMode","0,2");
+    d.put("r.MaterialQualityLevel","0,1");
+    d.put("r.Streaming.PoolSize","200,300,512");
+    d.put("r.StaticMeshLODDistanceScale","1.3,0.8,0.6");
+    d.put("foliage.LODDistanceScale","0.6,1,1.5");
+    d.put("r.ParticleLODBias","2,0");
+    d.put("fx.NiagaraLODBias","2,0");
+    d.put("r.IndividualParticleLODBias","2,0");
+    d.put("r.EmitterSpawnRateScale","0.5,1,1.0");
+    d.put("r.MaxAnisotropy","4,8,16");
+    d.put("r.UserShadowSwitch","0,1");
+    d.put("r.ShadowQuality","0,1,2");
+    d.put("r.Shadow.MaxCSMResolution","4,1024,2048");
+    d.put("r.Shadow.CSM.MaxMobileCascades","0,2");
+    d.put("r.Shadow.DistanceScale","0,0.5,1");
+    d.put("r.Mobile.DynamicObjectShadow","0,1");
+    d.put("r.MobileNumDynamicPointLights","0,1");
+    return d;
+  }
+  private void confirmMaxGraphics(){
+    new AlertDialog.Builder(this).setTitle("MAX Graphics — تجربة قصوى")
+      .setMessage("ستُكتب 18 قيمة للرسومات داخل UserCustom.ini: رندر 1.50، الظلال، تفاصيل الأشجار والمجسمات، الخامات والمؤثرات. قد يهبط FPS من 120 إلى أقل بكثير أو تتجاهل PUBG التغييرات أو تعيدها. تعديل ملفات اللعبة غير رسمي وقد يعرض الحساب للتقييد. سيتم حفظ نسخة احتياطية ولن يُغيّر قسم BackUp أو نظام Android. هل تريد التجربة بعد إغلاق PUBG؟")
+      .setNegativeButton("إلغاء",null)
+      .setPositiveButton("تطبيق MAX",(d,w)->run(()->applyMaxGraphics())).show();
+  }
+  private void applyMaxGraphics(){
+    String stage="البدء";
+    try{
+      stage="اختبار الروت";root("id");
+      stage="التأكد من إغلاق PUBG";
+      if(!root("pidof com.tencent.ig 2>/dev/null || true").trim().isEmpty()){
+        message("أغلق PUBG بالكامل ثم جرّب MAX.");return;
+      }
+      String path=pubgIniPath();
+      String safety="/sdcard/Download/YRC-PUBG-before-MAX.ini";
+      stage="قراءة الملف الأصلي";
+      String encodedSource=root("base64 '"+path+"'");
+      String original=new String(android.util.Base64.decode(encodedSource,android.util.Base64.DEFAULT),java.nio.charset.StandardCharsets.UTF_8);
+      if(original.length()<100||original.length()>60000)throw new IOException("حجم الملف غير متوقع، لا تعديل");
+      String[] lines=original.split("\n",-1);
+      java.util.LinkedHashMap<String,String> desired=maxGraphicsValues();
+      java.util.HashMap<String,String> allowed=maxDefaultGraphicsValues();
+      java.util.HashMap<String,Integer> counts=new java.util.HashMap<>();
+      java.util.HashMap<String,String> current=new java.util.HashMap<>();
+      String section="";
+      for(String row:lines){
+        String line=row.trim();
+        if(line.startsWith("[")&&line.endsWith("]")){section=line;continue;}
+        if(!"[UserCustom DeviceProfile]".equals(section)||!line.startsWith("+CVars="))continue;
+        String hex=line.substring(7);
+        if((hex.length()%2)!=0||!hex.matches("[0-9A-Fa-f]+"))continue;
+        String decoded=iniDecode(hex);
+        int eq=decoded.indexOf('=');
+        if(eq<0)continue;
+        String key=decoded.substring(0,eq);
+        if(!desired.containsKey(key))continue;
+        String value=decoded.substring(eq+1);
+        counts.put(key,counts.containsKey(key)?counts.get(key)+1:1);
+        current.put(key,value);
+      }
+      for(String key:desired.keySet()){
+        if(!Integer.valueOf(1).equals(counts.get(key))){
+          message("تعذر تطبيق MAX: يلزم وجود قيمة واحدة لـ "+key+" في UserCustom، ولم نعدل الملف.");return;
+        }
+        String currentValue=current.get(key);
+        java.util.List<String> known=java.util.Arrays.asList(allowed.get(key).split(","));
+        if(!known.contains(currentValue)){
+          message("تعذر تطبيق MAX: قيمة غير متوقعة "+key+"="+currentValue+"، لم نعدل الملف.");return;
+        }
+      }
+      int changed=0;
+      section="";
+      for(int i=0;i<lines.length;i++){
+        String line=lines[i].trim();
+        if(line.startsWith("[")&&line.endsWith("]")){section=line;continue;}
+        if(!"[UserCustom DeviceProfile]".equals(section)||!line.startsWith("+CVars="))continue;
+        String hex=line.substring(7);
+        if((hex.length()%2)!=0||!hex.matches("[0-9A-Fa-f]+"))continue;
+        String decoded=iniDecode(hex);
+        int eq=decoded.indexOf('=');
+        if(eq<0)continue;
+        String key=decoded.substring(0,eq),value=decoded.substring(eq+1);
+        if(!desired.containsKey(key)||desired.get(key).equals(value))continue;
+        lines[i]="+CVars="+iniEncode(key+"="+desired.get(key))+(lines[i].endsWith("\r")?"\r":"");
+        changed++;
+      }
+      if(changed==0){
+        message("قيم MAX كلها موجودة بالفعل في الملف. افحص بقاء القيم بعد اللعب؛ لا نضمن أن محرك PUBG يستخدمها.");
+        return;
+      }
+      String edited=android.text.TextUtils.join("\n",java.util.Arrays.asList(lines));
+      String payload=android.util.Base64.encodeToString(edited.getBytes(java.nio.charset.StandardCharsets.UTF_8),android.util.Base64.NO_WRAP);
+      stage="حفظ نسخة MAX الاحتياطية";
+      String state=root("if [ ! -e '"+safety+"' ]; then echo NEW; elif [ -s '"+safety+"' ]; then echo SAFE; else echo EMPTY; fi");
+      if("EMPTY".equals(state)){message("ملف نسخة MAX الاحتياطية فارغ؛ التعديل أُلغي.");return;}
+      if("NEW".equals(state))root("cp '"+path+"' '"+safety+"'");
+      if(!"SAFE".equals(root("if [ -s '"+safety+"' ]; then echo SAFE; else echo FAILED; fi"))){
+        message("لم تُحفظ نسخة احتياطية سليمة؛ لن يُعدّل الملف.");return;
+      }
+      String tmp="/data/local/tmp/yrc_pubg_max_temp.ini";
+      stage="تجهيز الملف المعدل";
+      root("printf '%s' '"+payload+"' | base64 -d > '"+tmp+"'");
+      String expected=root("sha256sum '"+tmp+"'").trim().split(" ")[0];
+      if(!expected.matches("[0-9a-fA-F]{64}"))throw new IOException("فشل التحقق من الملف المؤقت");
+      stage="كتابة ملف الرسومات";
+      root("cat '"+tmp+"' > '"+path+"'");
+      stage="فحص تطابق الملف";
+      String actual=root("sha256sum '"+path+"'").trim().split(" ")[0];
+      if(!expected.equalsIgnoreCase(actual)){
+        // Restore the last pre-MAX snapshot if the write was incomplete.
+        root("cat '"+safety+"' > '"+path+"'");
+        message("فشل التحقق من MAX؛ تمت محاولة استعادة الملف المحفوظ قبل MAX.");return;
+      }
+      root("rm -f '"+tmp+"'");
+      prefs.edit().putString("last_graphics_profile_sha",actual)
+        .putString("last_graphics_preset","MAX")
+        .putString("last_graphics_profile_scale","1.5").apply();
+      message("نجحت كتابة "+changed+" إعدادات من أصل "+desired.size()+" ضمن MAX والتحقق من بصمة الملف. نسخة الأمان: "+safety+
+        "\nهذا نجاح في الكتابة فقط، وليس إثباتًا أن PUBG فعّلت التأثيرات. افحص FPS ودرجة الحرارة والوضوح، ثم شغّل فحص القيم بعد اللعب.");
+    }catch(Exception e){message("فشل MAX عند «"+stage+"»: "+e.getMessage());}
+  }
   private void confirmCombinedIniGraphics(){
     new AlertDialog.Builder(this).setTitle("تعديل الرسومات داخل PUBG")
       .setMessage("هذا وضع تجريبي يكتب 7 قيم رسومية في UserCustom.ini بعد حفظ نسخة احتياطية: رندر 1.15 وتفاصيل وخامات أعلى. لن يعدّل ملفات أخرى أو يعطّل الحماية. قد تتجاهل PUBG القيم أو تعيدها عند التشغيل، وقد ينخفض FPS أو يتعرض الحساب للتقييد. أغلق اللعبة بالكامل أولًا.")
@@ -816,7 +966,8 @@ public class MainActivity extends Activity {
         message("لم تطابق الكتابة الملف المقصود؛ حاولت استعادة النسخة الأصلية.");return;
       }
       root("rm -f '"+temp+"'");
-      prefs.edit().putString("last_graphics_profile_sha",writtenSha)
+      prefs.edit().putString("last_graphics_preset","COMBINED")
+        .putString("last_graphics_profile_sha",writtenSha)
         .putString("last_graphics_profile_scale","1.15").apply();
       message("نجحت كتابة "+changed+" من أصل 7 إعدادات داخل UserCustom.ini والتحقق من تطابق SHA256.\n"+
         "هذه النتيجة تثبت كتابة الملف فقط؛ لا تثبت تطبيق PUBG لها. افتح اللعبة ثم استخدم فحص البقاء بعد اللعب.");
@@ -836,7 +987,8 @@ public class MainActivity extends Activity {
       int userMatches=0, backupMatches=0;
       java.util.HashMap<String,String> activeGraphics=new java.util.HashMap<>();
       java.util.HashMap<String,Integer> seenGraphics=new java.util.HashMap<>();
-      java.util.LinkedHashMap<String,String> expectedGraphics=combinedGraphicsValues();
+      String activePreset=prefs.getString("last_graphics_preset","COMBINED");
+      java.util.LinkedHashMap<String,String> expectedGraphics="MAX".equals(activePreset)?maxGraphicsValues():combinedGraphicsValues();
       for(String record:raw.split("\\r?\\n")){
         String line=record.trim();
         if(line.startsWith("[")&&line.endsWith("]")){section=line;continue;}
@@ -891,6 +1043,7 @@ public class MainActivity extends Activity {
         "Quality="+quality+" / Detail="+detail+" / Shadows="+shadows+"\n"+
         "Material="+material+" / Texture Pool="+streaming+"\n"+
         "Mesh LOD="+meshLOD+" / Particles="+particles+"\n"+
+        "الوضع المفحوص: "+activePreset+"\n"+
         "بقاء إعدادات ملف الجودة: "+keptGraphics+"/"+expectedGraphics.size()+"\n"+
         "بصمة الملف: "+hashReport+"\n"+
         "نسخة استعادة YRC: "+("YES".equals(originalBackup)?"موجودة":"غير موجودة")+
