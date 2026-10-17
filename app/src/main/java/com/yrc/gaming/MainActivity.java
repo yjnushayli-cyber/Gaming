@@ -54,13 +54,6 @@ public class MainActivity extends Activity {
     title("رسومات أوضح + منظور TPP واسع");
     label("ملف موحد يحافظ على دقة الشاشة الأصلية و120Hz، ثم يفتح إرشادات رفع TPP من داخل PUBG. لا يغيّر ملفات اللعبة أو يزعم 4K/240FPS.");
     button("تفعيل رسومات أوضح + TPP واسع",()->run(()->applyPcLikeProfile()));
-    title("حساسية Aim + حركة سريعة — PUBG");
-    label("قيم مبدئية قابلة للتعديل من إعدادات PUBG. لا يتم تعديل الحساسية داخل اللعبة تلقائيًا أو تشغيل Aim Assist خارجي.");
-    button("نسخ حساسية ثبات Aim + سرعة الحركة وفتح PUBG",()->copyAimProfile());
-    button("عرض ملف حساسية الجيروسكوب",()->showGyroProfile());
-    button("فحص ملفات حساسية PUBG وربط المسار (روت)",()->run(()->discoverSensitivityFiles()));
-    button("تسجيل بصمة ملفات التحكم قبل تغيير الحساسية",()->run(()->snapshotPubgSettings(false)));
-    button("مقارنة ملفات التحكم بعد تغيير الحساسية",()->run(()->snapshotPubgSettings(true)));
     title("التحسينات الإضافية");
     network=check("الشبكة: إبقاء Wi-Fi نشطًا أثناء اتصال الجهاز به",true);
     visual=check("العرض: إلغاء توفير الطاقة وطلب وضع الأداء",true);
@@ -256,68 +249,6 @@ public class MainActivity extends Activity {
       else report+="الاتصال بالراوتر مستقر في هذه العينة؛ قد يكون تذبذب PUBG خارج الشبكة المحلية.";
       message(report);
     }catch(Exception e){message("تعذر اختبار Wi-Fi: "+e.getMessage());}
-  }
-  private void snapshotPubgSettings(boolean compare){
-    String base="/sdcard/Android/data/com.tencent.ig/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/";
-    String[] paths={"SaveGames/SettingConfig_Slot.sav","Config/Android/UserSettings.ini","Config/Android/UserCustom.ini"};
-    ArrayList<String> rows=new ArrayList<>();
-    try{
-      root("id");
-      for(int i=0;i<paths.length;i++){
-        String p=base+paths[i];
-        String info=root("if [ -f '"+p+"' ]; then wc -c < '"+p+"'; sha256sum '"+p+"'; else echo MISSING; fi");
-        String[] lines=info.split("\n");
-        String fingerprint=lines.length>1?lines[0].trim()+" bytes / "+lines[1].trim().split(" ")[0]:"MISSING";
-        String key="settings_fingerprint_"+i;
-        if(compare){
-          String old=prefs.getString(key,"");
-          rows.add(paths[i]+": "+(old.isEmpty()?"لا توجد بصمة سابقة":old.equals(fingerprint)?"لم يتغير":"تغيّر")+"\n"+fingerprint);
-        }else{
-          prefs.edit().putString(key,fingerprint).commit();
-          rows.add(paths[i]+": "+fingerprint);
-        }
-      }
-      message((compare?"نتيجة المقارنة بعد تغيير الحساسية":"تم حفظ بصمات الملفات قبل تغيير الحساسية")+
-        "\n"+android.text.TextUtils.join("\n",rows)+
-        "\nهذا فحص فقط، ولم يتم تعديل أي ملف. تغيير الملف لا يثبت وحده وجود قيم الجيروسكوب فيه.");
-    }catch(Exception e){message("تعذر فحص بصمات الملفات: "+e.getMessage());}
-  }
-  private void discoverSensitivityFiles(){
-    try{
-      root("id");
-      String base="/sdcard/Android/data/com.tencent.ig/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved";
-      String output=root("find '"+base+"' -maxdepth 5 -type f \\( -iname '*sensitiv*' -o -iname '*control*' -o -iname '*input*' -o -iname '*setting*' \\) 2>/dev/null | head -35");
-      if(output.trim().isEmpty()){
-        message("لم يُعثر على ملف حساسية واضح ضمن إعدادات PUBG المحلية. قد تُخزّن اللعبة الحساسية بصيغة أخرى أو في بيانات خاصة/سحابية. لم نعدّل شيئًا.");
-      }else{
-        message("ملفات محتملة (قراءة فقط):\n"+output+"\n\nلم نثبت أنها تخزن حساسية الجيروسكوب؛ يلزم فحص الصيغة قبل أي تعديل.");
-      }
-    }catch(Exception e){message("تعذر فحص ملفات الحساسية: "+e.getMessage());}
-  }
-  private String aimProfile(){
-    return "YRC GT30 Pro | PUBG 120FPS\n"+
-      "Camera (TPP No Scope 115, FPP No Scope 105, Red Dot 55, 2x 40, 3x 28, 4x 22, 6x 12, 8x 10)\n"+
-      "ADS (TPP No Scope 100, FPP No Scope 95, Red Dot 50, 2x 36, 3x 27, 4x 20, 6x 12, 8x 9)\n"+
-      "TPP Camera View: highest official available\n"+
-      "Sprint Sensitivity: 90% (if available)\n"+
-      "Joystick Size: 110% (if available)\n"+
-      "Adjust in PUBG Settings > Sensitivity and Controls. Test in training ground.";
-  }
-  private void copyAimProfile(){
-    String values=aimProfile();
-    android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
-    cm.setPrimaryClip(android.content.ClipData.newPlainText("YRC PUBG sensitivity",values));
-    new AlertDialog.Builder(this).setTitle("حساسية Aim + حركة سريعة")
-      .setMessage(values+"\n\nتم نسخ القيم. التطبيق لا يغير إعدادات PUBG تلقائيًا.")
-      .setNegativeButton("إغلاق",null)
-      .setPositiveButton("فتح PUBG",(d,w)->launchGame()).show();
-  }
-  private void showGyroProfile(){
-    String values="Gyroscope (if enabled)\nTPP No Scope: 300%\nFPP No Scope: 300%\nRed Dot: 300%\n2x: 280%\n3x: 230%\n4x: 190%\n6x: 90%\n8x: 65%\nADS Gyroscope: start with same values. Test recoil on training ground.";
-    android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
-    cm.setPrimaryClip(android.content.ClipData.newPlainText("YRC PUBG gyro",values));
-    new AlertDialog.Builder(this).setTitle("حساسية الجيروسكوب").setMessage(values+"\n\nتم نسخ القيم.")
-      .setPositiveButton("تم",null).show();
   }
   private void applyPcLikeProfile(){
     ArrayList<String> logs=new ArrayList<>();
