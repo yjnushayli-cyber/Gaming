@@ -269,11 +269,15 @@ final class SessionManager {
         return logs;
     }
 
-    static boolean pubgRunning(){
+    /** null means root status could not be checked, NOT that PUBG was closed. */
+    static Boolean pubgRunning(){
         try{
-            return "RUNNING".equals(root("if pidof com.tencent.ig >/dev/null 2>&1; "+
-                "then echo RUNNING; else echo STOPPED; fi").trim());
-        }catch(Exception e){return false;}
+            String answer=root("if pidof com.tencent.ig >/dev/null 2>&1; "+
+                "then echo RUNNING; else echo STOPPED; fi").trim();
+            if("RUNNING".equals(answer))return Boolean.TRUE;
+            if("STOPPED".equals(answer))return Boolean.FALSE;
+        }catch(Exception ignored){}
+        return null;
     }
 
     private static String shortError(Exception e){
