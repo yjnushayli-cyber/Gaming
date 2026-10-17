@@ -45,7 +45,7 @@ public class MainActivity extends Activity {
     private LinearLayout main;
     private TextView status;
     private String lastReport="جاهز • تحسينات نظام Android فقط، دون تعديل ملفات PUBG.";
-    private int pendingSessionPercent=90;
+    private int pendingSessionPercent=85;
     private static final int NOTIFICATION_REQUEST=501;
 
     @Override public void onCreate(Bundle state) {
@@ -95,24 +95,22 @@ public class MainActivity extends Activity {
         scroll.addView(main);
         frame.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
 
-        heading("YRC GAMING PRO 5.0 • SESSION");
-        info("جلسة لعب تنافسية بضغطة واحدة: 120Hz + تحسين ترددات معتدل + دقة 90% + اتصال Wi-Fi منخفض التأخير + تشغيل PUBG. لا تعديل لملفات اللعبة.");
-        action("▶ START COMPETITIVE SESSION",()->requestCompetitiveSession(90));
-        action("▶ START SUSTAINED SESSION (85%)",()->requestCompetitiveSession(85));
-        action("⟲ RESTORE ORIGINAL SETTINGS",this::restoreSessionNow);
-        info("بعد إغلاق PUBG، تحاول خدمة جلسة ظاهرة في الإشعارات استعادة الإعدادات تلقائيًا. XOS قد يوقفها؛ زر الاستعادة اليدوية دائمًا متاح.");
+        heading("YRC GAMING PRO 5.1 • COOL FPS");
+        info("بعد تجربة 100–105FPS مع سخونة الجهاز، أوقفنا تمامًا رفع الحد الأدنى لترددات CPU/GPU. هذه النسخة تترك XOS يتحكم بالترددات والحرارة.");
+        action("▶ لعب أبرد — دقة 85% + 120Hz",()->requestCompetitiveSession(85));
+        action("▶ لعب متوازن — دقة 90% + 120Hz",()->requestCompetitiveSession(90));
+        action("⟲ إيقاف كل التحسينات واستعادة الأصل",this::restoreSessionNow);
+        info("يمنع YRC بدء الجلسة إذا كانت البطارية ساخنة أو ارتفع مستوى الحماية الحرارية. بعد إغلاق PUBG يحاول استعادة الإعدادات تلقائيًا؛ زر الاستعادة اليدوي دائمًا متاح.");
         action("XArena — eSports / Bypass Charging",this::openXArena);
         action("عدم الإزعاج خلال الجلسة (اختياري)",this::toggleDndSession);
-        info("الوضع الافتراضي 90% أنسب للاختبار الأول. خيار عدم الإزعاج لا يتفعّل إلا بموافقتك وصلاحية Android.");
+        info("ابدأ بوضع 85% بعد أن يبرد الجهاز. هذا يقلل حمل البكسلات المعروضة لكنه لا يضمن 120FPS ثابتًا داخل محرك PUBG.");
 
-        heading("خيارات أداء إضافية");
-        info("هذه الخيارات منفصلة عن جلسة اللعب السريعة. استعد الإعدادات قبل استخدام ملفات أداء مختلفة.");
-        action("ثبات الاشتباكات يدويًا — دقة 90%",()->confirmCombatProfile(90));
-        action("تخفيف العرض يدويًا — دقة 85%",()->confirmCombatProfile(85));
+        heading("بدون رفع ترددات");
+        info("ألغينا الأزرار التي تكرر رفع ترددات CPU/GPU. لمنع زيادة السخونة نستخدم تخفيف العرض والخيارات الرسمية للعبة فقط.");
 
         heading("01  ثبات الفريمات");
-        info("الهبوط 60↔120 أثناء الحركة قد يكون من ضغط GPU أو الحرارة أو قيد اللعبة. جرّب أولًا وضع 90%، ثم 85% إذا بقي التذبذب. وضع 120Hz ليس قفلًا لفريمات PUBG.");
-        action("تفعيل وضع ثبات 120FPS",()->background(this::applyFpsProfile));
+        info("الهبوط إلى 100FPS مع حرارة مرتفعة يدل أن رفع الترددات السابقة لم يساعدك. ابدأ بجهاز بارد، PUBG Smooth + أعلى FPS رسمي متاح، ولا ترفع ترددات CPU/GPU يدويًا.");
+        action("طلب شاشة 120Hz فقط — بدون Boost",()->background(this::applyFpsProfile));
 
         heading("02  تحسين الرسومات");
         info("جودة الشاشة من Android فقط. جودة الخامات وHDR والفريمات الحقيقية تختارها من قائمة PUBG الرسمية.");
@@ -139,7 +137,7 @@ public class MainActivity extends Activity {
         action("إرجاع جميع الإعدادات المحفوظة",this::restoreSessionNow);
         action("إرجاع أبعاد الشاشة المصنعية فقط",this::confirmFactoryScreenRestore);
         action("فتح PUBG Mobile بدون تجهيز جلسة",this::launchGame);
-        info("كل جلسة قابلة للإلغاء. YRC لا يضمن 120FPS ثابتًا ولا يستطيع تغيير احتساب الضربات في سيرفر PUBG.");
+        info("لا يوجد برنامج يستطيع ضمان 120FPS ثابتًا عند ارتفاع الحرارة أو تقييد PUBG/XOS للأداء. لا تعديل لملفات اللعبة ولا تجاوز لقيود الحرارة.");
         if(SessionManager.active(this)){
             new AlertDialog.Builder(this)
                 .setTitle("جلسة لعب غير مستعادة")
@@ -168,7 +166,7 @@ public class MainActivity extends Activity {
         if(!prefs.getBoolean("session5_consent",false)){
             new AlertDialog.Builder(this)
                 .setTitle("YRC Competitive Session")
-                .setMessage("سيغيّر YRC إعدادات الشاشة وبعض حدود ترددات CPU/GPU وWi-Fi مع الاحتفاظ بالقيم السابقة، ثم يفتح PUBG. قد يزيد الاستهلاك أو تتغير أبعاد اللمس. ستظهر خدمة للاستعادة عند إغلاق اللعبة، لكنها ليست مضمونة إذا أوقفها XOS.\n\nلا يغيّر ملفات PUBG أو يخفي الروت أو يعطّل الحماية الحرارية.")
+                .setMessage("سيستعيد YRC أي رفع قديم لحدود ترددات CPU/GPU، ثم يطلب 120Hz ويخفّض دقة عرض Android مع إعداد Wi-Fi عند دعمه، ويفتح PUBG. يمنع بدء الجلسة إذا كان الجهاز ساخنًا. هذه ليست طريقة لإجبار اللعبة على 120FPS.\n\nستظهر خدمة تحاول الاستعادة عند إغلاق اللعبة، لكن لا نعتمد عليها وحدها؛ زر الاستعادة متاح دومًا. لا تعديل لملفات PUBG.")
                 .setNegativeButton("إلغاء",null)
                 .setPositiveButton("أفهم، ابدأ",(d,w)->{
                     prefs.edit().putBoolean("session5_consent",true).commit();
@@ -408,7 +406,7 @@ public class MainActivity extends Activity {
             .setMessage("لاحظت أن PUBG تتذبذب عندك بين 60 و120FPS أثناء القتال.\n\n"+
                 "سيغيّر YRC إعدادات النظام فعليًا:\n"+
                 "• تقليل أبعاد عرض Android إلى "+percent+"% من المقاس الأصلي، مع الإبقاء على نسبة PC إذا كانت مفعلة.\n"+
-                "• تخفيف الحد الأدنى العالي السابق لترددات CPU/GPU إلى مستوى معتدل قابل للاستعادة.\n"+
+                "• إزالة رفع الحد الأدنى السابق لترددات CPU/GPU بالكامل لتخفيف الحرارة.\n"+
                 "• طلب شاشة 120Hz وإيقاف توفير الطاقة.\n\n"+
                 "الهدف تقليل ضغط الرسم والحرارة؛ لا يمكن ضمان تثبيت 120FPS ولا التحكم في FPS محرك PUBG. قد تظهر أشرطة أو تتغير أماكن اللمس.")
             .setNegativeButton("إلغاء",null)
@@ -423,13 +421,9 @@ public class MainActivity extends Activity {
             rootReady();
             boolean hot=tooHot();
             KernelBoost kernel=new KernelBoost(prefs);
-            if(hot){
-                // Undo elevated DVFS minima if device is already too hot.
-                report.add("حرارة الجهاز مرتفعة؛ لن نرفع ترددات CPU/GPU.");
-                report.addAll(kernel.restore());
-            }else{
-                report.addAll(kernel.applyStability());
-            }
+            report.addAll(kernel.restore());
+            if(hot)report.add("حرارة الجهاز مرتفعة؛ استعدنا Boost السابق وتركنا التحكم للتبريد الذاتي.");
+            else report.add("CPU/GPU: لا رفع لترددات النواة في هذا الإصدار؛ XOS يتحكم بها.");
             try{
                 changeSetting("system","tran_refresh_mode","120");
                 changeSetting("system","peak_refresh_rate","120.0");
