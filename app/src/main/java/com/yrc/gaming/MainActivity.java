@@ -96,7 +96,9 @@ public class MainActivity extends Activity {
         action("إعدادات الرسومات الرسمية الموصى بها",this::showGraphicsGuide);
 
         heading("03  ثبات البنق");
-        info("اختبار الاتصال الخارجي وفقد الاتصال والتذبذب؛ ليس قياسًا لخادم PUBG، ولا يمكن ضمان بنق ثابت من الهاتف.");
+        info("وضع Wi-Fi Low Latency رسمي من Android قد يقلّل التأخير إذا دعمه XOS. يزيد استهلاك البطارية ولا يعمل على بيانات الجوال. الاختبار ليس قياسًا لسيرفر PUBG.");
+        action("تفعيل Wi-Fi Low Latency (تجريبي)",()->background(()->setLowLatency(true)));
+        action("إلغاء Wi-Fi Low Latency",()->background(()->setLowLatency(false)));
         action("اختبار البنق والتذبذب (10 محاولات)",()->background(this::checkNetwork));
         action("فتح إعدادات Wi-Fi والشبكة",()->{
             try{startActivity(new Intent(Settings.ACTION_WIFI_SETTINGS));}
@@ -345,6 +347,35 @@ public class MainActivity extends Activity {
             .show();
     }
 
+    private void setLowLatency(boolean enable){
+        try{
+            rootReady();
+            if(enable){
+                ConnectivityManager cm=(ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
+                Network net=cm==null?null:cm.getActiveNetwork();
+                NetworkCapabilities caps=net==null||cm==null?null:cm.getNetworkCapabilities(net);
+                if(caps==null||!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)){
+                    message("Wi-Fi Low Latency يعمل على Wi-Fi فقط. اتصل بالشبكة قبل التفعيل.");
+                    return;
+                }
+            }
+            String option=enable?"enabled":"disabled";
+            // AOSP documented shell command; can be absent or unsupported on OEM firmware.
+            String out=root("cmd wifi force-low-latency-mode "+option);
+            String lower=out.toLowerCase(Locale.US);
+            if(lower.contains("failed")||lower.contains("error")||
+               lower.contains("unknown")||lower.contains("not supported")||
+               lower.contains("exception")||lower.contains("usage")){
+                message("لم يقبل XOS تغيير وضع تأخير Wi-Fi. لم نعتبر العملية ناجحة:\n"+out);
+                return;
+            }
+            prefs.edit().putBoolean("clean_wifi_latency_on",enable).commit();
+            message(enable?
+                "تم إرسال طلب Wi-Fi Low Latency للنظام. قد يقلل التأخير مع Wi-Fi المدعوم، لكنه لا يثبت بنق PUBG ولا يضمن ثباته. قد يزيد استهلاك البطارية. اضغط إلغاء بعد اللعب.":
+                "تم إرسال طلب إلغاء Wi-Fi Low Latency وإعادة الشبكة للوضع المعتاد.");
+        }catch(Exception e){message("لم يمكن تغيير وضع Wi-Fi Low Latency: "+e.getMessage());}
+    }
+
     private void checkNetwork(){
         try{
             ConnectivityManager cm=(ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -410,6 +441,17 @@ public class MainActivity extends Activity {
             undoSetting("system","peak_refresh_rate",out);
             undoSetting("system","min_refresh_rate",out);
             undoSetting("global","low_power",out);
+            if(prefs.getBoolean("clean_wifi_latency_on",false)){
+                try{
+                    String wifiResult=root("cmd wifi force-low-latency-mode disabled");
+                    if(wifiResult.toLowerCase(Locale.US).contains("failed"))
+                        throw new IOException(wifiResult);
+                    prefs.edit().remove("clean_wifi_latency_on").commit();
+                    out.add("Wi-Fi Low Latency: تم طلب الإيقاف");
+                }catch(Exception e){
+                    out.add("تعذر إلغاء Wi-Fi Low Latency: "+e.getMessage());
+                }
+            }
             if(prefs.getBoolean("clean_requested_game_mode",false)&&gameInstalled()){
                 try{
                     root("cmd game mode 1 "+PUBG);
