@@ -91,9 +91,9 @@ public class MainActivity extends Activity {
         scroll.addView(main);
         frame.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
 
-        heading("YRC GAMING PRO 4.0 • BOOST");
+        heading("YRC GAMING PRO 4.1 • BOOST");
         info("GT30 Pro • تحسينات Android فعلية فقط، بدون تعديل ملفات PUBG أو تعطيل الحماية الحرارية.");
-        info("التعديل المتقدم يرفع الحد الأدنى لتردد CPU/GPU عندما تسمح النواة، مع 120Hz وWi-Fi Low Latency. قد يزيد الحرارة والبطارية ولا يضمن 119FPS ثابتًا.");
+        info("Boost يعيد فحص الترددات الحقيقية لـ CPU/GPU، ويعيد تطبيق الحد الأدنى الآمن عند زواله دون مضاعفة الرفع. قد يزيد الحرارة والبطارية، ولا يضمن 119FPS ثابتًا.");
         action("تفعيل YRC COMPETITIVE BOOST",this::confirmCompetitiveBoost);
         action("إيقاف BOOST واستعادة الإعدادات",this::confirmRestore);
 
