@@ -52,13 +52,10 @@ public class MainActivity extends Activity {
     button("تفعيل جودة متوازنة + 120FPS",()->run(()->applyGraphicsProfile(false)));
     button("تفعيل أولوية ثبات 120FPS",()->run(()->applyGraphicsProfile(true)));
     button("استعادة دقة العرض الأصلية",()->run(()->restoreGraphicsProfile()));
-    title("حل رجوع إعدادات الرسومات بعد تشغيل PUBG");
-    label("بعد اختبار جهازك تبيّن أن حفظ CVars في الملف لا يضمن تطبيقها أو استمرارها. الخيار المستقر هو استعادة الملف وضبط الجودة من داخل PUBG.");
-    button("استعادة رسومات PUBG وفتح اللعبة للإعدادات الرسمية",()->new AlertDialog.Builder(this)
-      .setTitle("استعادة ملف الرسومات الأصلي")
-      .setMessage("سيعيد UserCustom.ini من نسخة YRC الاحتياطية، وقد يعيد اختيارات الرسومات السابقة. لن يحذف حسابك أو اللعبة، لكنه لا يضمن FPS. أغلق PUBG تمامًا قبل المتابعة.")
-      .setNegativeButton("إلغاء",null)
-      .setPositiveButton("استعادة",(d,w)->run(()->restoreIniAndOfferGraphics())).show());
+    title("تعديل الرندر والتفاصيل بضغطة واحدة — PUBG");
+    label("ملف موحد: رندر 1.15 + 6 إعدادات تفاصيل وخامات من إعدادات اللعبة الاحتياطية. يُكتب إلى UserCustom فقط، وليس إلى Android. لا يضمن استمرار القيم بعد تشغيل اللعبة.");
+    button("تطبيق رندر 1.15 + تفاصيل أعلى داخل PUBG",()->confirmCombinedIniGraphics());
+    button("فحص بقاء جميع تحسينات الرسومات بعد اللعب",()->run(()->verifyIniQualityAfterGame()));
     title("تحسين الرسومات داخل ملف PUBG — تجريبي");
     label("تعديلات غير رسمية للملف. في اختبارك عادت إعدادات التفاصيل بعد اللعب؛ نجاح كتابة CVars لا يعني اعتمادها في المحرك. قد تتجاهلها PUBG وقد يتأثر الحساب. جرّب الخيار الرسمي بالأعلى أولًا.");
     button("تطبيق تحسين وضوح 10% داخل UserCustom.ini",()->new AlertDialog.Builder(this).setTitle("تعديل ملف رسومات PUBG").setMessage("سيُنشئ التطبيق نسخة احتياطية ثم يرفع r.MobileContentScaleFactor من 1 إلى 1.1 إن كانت القيمة موجودة. هذا تعديل غير رسمي وقد لا تقبله اللعبة أو قد يعرّض الحساب للقيود. أغلق PUBG قبل المتابعة.").setNegativeButton("إلغاء",null).setPositiveButton("تطبيق", (d,w)->run(()->applyIniClarity())).show());
@@ -700,6 +697,130 @@ public class MainActivity extends Activity {
         "أغلق اللعبة قبل التعديل ثم اختبر مشهدًا مماثلًا أثناء اللعب. لا يعني حفظ القيم أن PUBG استخدمتها أو أن FPS ارتفع.\n"+
         "للتراجع استخدم زر استعادة ملف رسومات PUBG الأصلي.");
     }catch(Exception e){message("فشل وضع التفاصيل عند «"+stage+"»: "+e.getMessage());}
+  }
+  private void confirmCombinedIniGraphics(){
+    new AlertDialog.Builder(this).setTitle("تعديل الرسومات داخل PUBG")
+      .setMessage("هذا وضع تجريبي يكتب 7 قيم رسومية في UserCustom.ini بعد حفظ نسخة احتياطية: رندر 1.15 وتفاصيل وخامات أعلى. لن يعدّل ملفات أخرى أو يعطّل الحماية. قد تتجاهل PUBG القيم أو تعيدها عند التشغيل، وقد ينخفض FPS أو يتعرض الحساب للتقييد. أغلق اللعبة بالكامل أولًا.")
+      .setNegativeButton("إلغاء",null)
+      .setPositiveButton("كتابة وفحص",(d,w)->run(()->applyCombinedIniGraphics())).show();
+  }
+  private java.util.LinkedHashMap<String,String> combinedGraphicsValues(){
+    java.util.LinkedHashMap<String,String> desired=new java.util.LinkedHashMap<>();
+    desired.put("r.MobileContentScaleFactor","1.15");
+    desired.put("r.DetailMode","2");
+    desired.put("r.MaterialQualityLevel","1");
+    desired.put("r.Streaming.PoolSize","300");
+    desired.put("r.StaticMeshLODDistanceScale","0.8");
+    desired.put("r.ParticleLODBias","0");
+    desired.put("fx.NiagaraLODBias","0");
+    return desired;
+  }
+  private void applyCombinedIniGraphics(){
+    String stage="البدء";
+    try{
+      stage="فحص الروت";
+      root("id");
+      stage="التحقق من إغلاق PUBG";
+      if(!root("pidof com.tencent.ig 2>/dev/null || true").trim().isEmpty()){
+        message("أغلق PUBG بالكامل قبل تطبيق التعديل.");return;
+      }
+      String path=pubgIniPath(),backup=iniBackupPath();
+      stage="قراءة ملف الرسومات";
+      String raw64=root("base64 '"+path+"'");
+      String original=new String(android.util.Base64.decode(raw64,android.util.Base64.DEFAULT),java.nio.charset.StandardCharsets.UTF_8);
+      if(original.length()<100||original.length()>60000)throw new IOException("حجم UserCustom.ini غير متوقع");
+      java.util.LinkedHashMap<String,String> desired=combinedGraphicsValues();
+      java.util.HashMap<String,Integer> counts=new java.util.HashMap<>();
+      java.util.HashMap<String,String> oldValues=new java.util.HashMap<>();
+      java.util.HashMap<String,String> backupValues=new java.util.HashMap<>();
+      java.util.HashMap<String,String> defaults=new java.util.HashMap<>();
+      defaults.put("r.MobileContentScaleFactor","1");
+      defaults.put("r.DetailMode","0");
+      defaults.put("r.MaterialQualityLevel","0");
+      defaults.put("r.Streaming.PoolSize","200");
+      defaults.put("r.StaticMeshLODDistanceScale","1.3");
+      defaults.put("r.ParticleLODBias","2");
+      defaults.put("fx.NiagaraLODBias","2");
+      String section="";
+      String[] lines=original.split("\n",-1);
+      for(String record:lines){
+        String line=record.trim();
+        if(line.startsWith("[")&&line.endsWith("]")){section=line;continue;}
+        if(!line.startsWith("+CVars="))continue;
+        String hex=line.substring(7);
+        if(hex.length()%2!=0||!hex.matches("[a-fA-F0-9]+"))continue;
+        String decoded=iniDecode(hex);
+        int eq=decoded.indexOf('=');
+        if(eq<0)continue;
+        String key=decoded.substring(0,eq),val=decoded.substring(eq+1);
+        if(!desired.containsKey(key))continue;
+        if("[UserCustom DeviceProfile]".equals(section)){
+          counts.put(key,counts.containsKey(key)?counts.get(key)+1:1);
+          oldValues.put(key,val);
+        }else if("[BackUp DeviceProfile]".equals(section)){
+          backupValues.put(key,val);
+        }
+      }
+      for(String key:desired.keySet()){
+        if(!Integer.valueOf(1).equals(counts.get(key))){
+          message("أوقف التعديل: لم أجد قيمة واحدة لـ "+key+" في القسم الحالي.");return;
+        }
+        String old=oldValues.get(key),val=desired.get(key);
+        boolean known=val.equals(old)||defaults.get(key).equals(old)||
+          ("r.MobileContentScaleFactor".equals(key)&&"1.0".equals(old));
+        if(!known){
+          message("القيمة الحالية لـ "+key+" غير متوقعة: "+old+"؛ لم أعدل الملف.");return;
+        }
+        if(!"r.MobileContentScaleFactor".equals(key)&&!val.equals(backupValues.get(key))){
+          message("ملف BackUp لا يؤكد قيمة "+key+"؛ أوقفت التعديل.");return;
+        }
+      }
+      int changed=0;
+      section="";
+      for(int i=0;i<lines.length;i++){
+        String line=lines[i].trim();
+        if(line.startsWith("[")&&line.endsWith("]")){section=line;continue;}
+        if(!"[UserCustom DeviceProfile]".equals(section)||!line.startsWith("+CVars="))continue;
+        String hex=line.substring(7);
+        if(hex.length()%2!=0||!hex.matches("[a-fA-F0-9]+"))continue;
+        String decoded=iniDecode(hex);
+        int eq=decoded.indexOf('=');
+        if(eq<0)continue;
+        String key=decoded.substring(0,eq),val=decoded.substring(eq+1);
+        if(!desired.containsKey(key)||desired.get(key).equals(val))continue;
+        lines[i]="+CVars="+iniEncode(key+"="+desired.get(key))+
+          (lines[i].endsWith("\r")?"\r":"");
+        changed++;
+      }
+      if(changed==0){message("قيم الرندر والتفاصيل السبعة موجودة بالفعل داخل UserCustom.ini. يلزم فحصها بعد تشغيل اللعبة.");return;}
+      String edited=android.text.TextUtils.join("\n",java.util.Arrays.asList(lines));
+      String content64=android.util.Base64.encodeToString(edited.getBytes(java.nio.charset.StandardCharsets.UTF_8),android.util.Base64.NO_WRAP);
+      stage="حفظ نسخة احتياطية";
+      String state=root("if [ ! -e '"+backup+"' ]; then echo MISSING; elif [ -s '"+backup+"' ]; then echo READY; else echo EMPTY; fi");
+      if("EMPTY".equals(state)){message("نسخة YRC الاحتياطية فارغة؛ لم أعدل PUBG.");return;}
+      if("MISSING".equals(state))root("cp '"+path+"' '"+backup+"'");
+      if(!"READY".equals(root("if [ -s '"+backup+"' ]; then echo READY; else echo FAIL; fi"))){
+        message("فشل تأكيد النسخة الاحتياطية، لم أكتب أي قيم.");return;
+      }
+      String temp="/data/local/tmp/yrc_pubg_combined_temp.ini";
+      stage="تجهيز القيم";
+      root("printf '%s' '"+content64+"' | base64 -d > '"+temp+"'");
+      String tempSha=root("sha256sum '"+temp+"'").trim().split(" ")[0];
+      if(!tempSha.matches("[a-fA-F0-9]{64}"))throw new IOException("بصمة الملف غير صالحة");
+      stage="تعديل UserCustom.ini";
+      root("cat '"+temp+"' > '"+path+"'");
+      stage="التحقق من الكتابة";
+      String writtenSha=root("sha256sum '"+path+"'").trim().split(" ")[0];
+      if(!tempSha.equalsIgnoreCase(writtenSha)){
+        root("cat '"+backup+"' > '"+path+"'");
+        message("لم تطابق الكتابة الملف المقصود؛ حاولت استعادة النسخة الأصلية.");return;
+      }
+      root("rm -f '"+temp+"'");
+      prefs.edit().putString("last_graphics_profile_sha",writtenSha)
+        .putString("last_graphics_profile_scale","1.15").apply();
+      message("نجحت كتابة "+changed+" من أصل 7 إعدادات داخل UserCustom.ini والتحقق من تطابق SHA256.\n"+
+        "هذه النتيجة تثبت كتابة الملف فقط؛ لا تثبت تطبيق PUBG لها. افتح اللعبة ثم استخدم فحص البقاء بعد اللعب.");
+    }catch(Exception e){message("تعذر تعديل الرسومات عند «"+stage+"»: "+e.getMessage());}
   }
   private void verifyIniQualityAfterGame(){
     try{
