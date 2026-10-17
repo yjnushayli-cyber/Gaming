@@ -416,7 +416,7 @@ public class MainActivity extends Activity {
         }
         String value=d.toString();
         if(value.matches("(?i).*(quality|resolution|scale|shadow|msaa|fps|frame|texture|render).*")){
-          if(found++<25)out.append(value).append('\\n');
+          if(found++<25)out.append(value).append('\n');
         }
       }
       out.append("\\nالنتيجة: ").append(found).append(" إعدادًا ذا صلة. لا يمكن ضمان 4K أو 240FPS من CVars.");
