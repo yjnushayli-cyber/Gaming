@@ -68,6 +68,9 @@ public class MainActivity extends Activity {
     button("اختبار Wi-Fi والراوتر (10 حزم)",()->run(()->testWifi()));
     button("فتح إعدادات Wi-Fi",()->{try{startActivity(new Intent(android.provider.Settings.ACTION_WIFI_SETTINGS));}catch(Exception e){message("تعذر فتح Wi-Fi");}});
     button("إيقاف وضع الأداء القوي واستعادة الإعدادات",()->run(()->stopStrongMode()));
+    title("تحليل رسومات PUBG 4.6.0");
+    label("قراءة فقط لملف UserCustom.ini وفك CVars دون تعديل ملفات اللعبة.");
+    button("تحليل إعدادات PUBG 4.6.0",()->run(()->analyzePubgConfig()));
     title("التحكم");
     button("تطبيق التحسينات وتشغيل ببجي",()->{final int selected=profiles.getCheckedRadioButtonId();final boolean net=network.isChecked(),vis=visual.isChecked(),input=touch.isChecked(),guide=pcView.isChecked();run(()->applyAndLaunch(selected,net,vis,input,guide));});
     button("استعادة إعدادات النظام",()->run(()->restore()));
@@ -270,6 +273,33 @@ public class MainActivity extends Activity {
     try{root("cmd power set-fixed-performance-mode-enabled false");}catch(Exception ignored){}
     prefs.edit().putBoolean("strong_mode",false).commit();
     message(android.text.TextUtils.join(String.valueOf((char)10),logs));
+  }
+  private void analyzePubgConfig(){
+    String path="/sdcard/Android/data/com.tencent.ig/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/Config/Android/UserCustom.ini";
+    try{
+      if(!"com.tencent.ig".equals(pkg())){message("هذا القارئ مخصص لنسخة PUBG Global com.tencent.ig");return;}
+      String raw=root("cat '"+path+"'");
+      if(raw.length()>60000){message("ملف الإعدادات كبير؛ تم إيقاف القراءة الآمنة.");return;}
+      String section="";int count=0;StringBuilder report=new StringBuilder("PUBG 4.6.0 | قراءة فقط\n");
+      for(String line:raw.split("\\r?\\n")){
+        line=line.trim();
+        if(line.startsWith("[")&&line.endsWith("]")){section=line;continue;}
+        if(!line.startsWith("+CVars="))continue;
+        String hex=line.substring(7).trim();
+        if(hex.length()%2!=0||!hex.matches("[0-9A-Fa-f]+"))continue;
+        StringBuilder decoded=new StringBuilder();
+        for(int i=0;i<hex.length();i+=2){
+          int value=Integer.parseInt(hex.substring(i,i+2),16)^0x79;
+          decoded.append(value>=32&&value<=126?(char)value:'?');
+        }
+        if(section.contains("UserCustom")){
+          if(count<60)report.append(decoded).append('\n');
+          count++;
+        }
+      }
+      report.append("عدد قيم UserCustom: ").append(count).append("\nلم يتم تعديل الملف. القيم لا تثبت FPS فعليًا.");
+      message(report.toString());
+    }catch(Exception e){message("تعذرت قراءة إعدادات PUBG بالروت: "+e.getMessage());}
   }
   private void request144(){
     try{
