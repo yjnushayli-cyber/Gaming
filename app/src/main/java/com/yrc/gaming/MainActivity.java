@@ -66,7 +66,7 @@ public class MainActivity extends Activity {
     label("Infinix GT30 Pro • PUBG Mobile • نسخة مركزة على ما تحتاجه");
 
     title("01  |  حماية الحساب");
-    label("وضع الأمان يمنع تعديل ملفات PUBG الجديدة عبر YRC. لا يخفي الروت ولا يلغي أي تعديلات سابقة؛ ولا يوجد ضمان لمنع الحظر.");
+    label("حماية وقائية: تمنع YRC من كتابة ملفات اللعبة، وتفحص UserCustom.ini وActive.sav قبل تشغيل PUBG من التطبيق، وتوقف التشغيل عند اكتشاف إعدادات مشبوهة. لا تخفي التعديلات عن مكافحة الغش ولا تمنع فتح اللعبة من خارج YRC.");
     CheckBox accountSafety=new CheckBox(this);
     accountSafety.setText("وضع الأمان — منع كتابة تعديلات في ملفات اللعبة");
     accountSafety.setTextSize(16);
@@ -90,6 +90,9 @@ public class MainActivity extends Activity {
           .show();
       }
     });
+    button("فحص سلامة ملفات PUBG قبل اللعب",()->run(()->preflightGameSafety(false)));
+    button("تشغيل آمن بفحص الملفات أولًا",()->launchGame());
+    button("إرشادات إصلاح اللعبة الرسمي",()->showOfficialRepairGuide());
     button("فحص صلاحية الروت والحماية",()->run(()->diagnoseRootAccess()));
 
     title("02  |  ثبات الفريمات");
@@ -818,10 +821,197 @@ public class MainActivity extends Activity {
   }
 
   private void launchGame(){
+    if(prefs.getBoolean("account_safety_mode",true)){
+      run(()->preflightGameSafety(true));
+      return;
+    }
+    new AlertDialog.Builder(this)
+      .setTitle("وضع الحماية معطّل")
+      .setMessage("أنت تستخدم تشغيلًا دون فحص سلامة ملفات اللعبة. قد تكون تعديلات MAX أو GFX السابقة موجودة وقابلة لاكتشاف PUBG. لا توجد حماية Anti-Ban تمنع العقوبات. هل تريد الفحص أولًا؟")
+      .setNegativeButton("إلغاء",null)
+      .setNeutralButton("تشغيل رغم المخاطر",(d,w)->launchPubgIntent())
+      .setPositiveButton("فحص قبل التشغيل",(d,w)->run(()->preflightGameSafety(true)))
+      .show();
+  }
+  private void launchPubgIntent(){
     String game=pkg();
-    if(game==null){message("لم يتم العثور على ببجي");return;}
+    if(game==null){message("لم يتم العثور على PUBG Mobile");return;}
     Intent i=getPackageManager().getLaunchIntentForPackage(game);
-    if(i!=null)startActivity(i);else message("تعذر تشغيل ببجي");
+    if(i!=null){
+      try{startActivity(i);}
+      catch(Exception e){message("تعذر تشغيل PUBG: "+e.getMessage());}
+    }else message("لم أجد طريقة تشغيل PUBG المثبتة.");
+  }
+  private void showOfficialRepairGuide(){
+    new AlertDialog.Builder(this).setTitle("إعادة اللعبة للحالة الرسمية")
+      .setMessage("لخفض خطر تقييد الحساب بعد تعديل ملفات PUBG:\\n\\n"+
+        "1. أغلق PUBG ولا تحاول تمويه التعديلات أو إخفاء الروت عن مكافحة الغش.\\n"+
+        "2. استخدم زر YRC للعودة إلى النسخ المحفوظة إذا كانت موثوقة.\\n"+
+        "3. للحصول على ملفات PUBG الأصلية من مصدرها، استخدم Repair الرسمي من شاشة بدء اللعبة إن توفر، أو أعد تنزيل اللعبة من المتجر الرسمي بعد التأكد من ربط حسابك.\\n"+
+        "4. شغّل فحص السلامة مجددًا قبل اللعب.\\n\\n"+
+        "أي نسخة احتياطية أنشأها YRC قد تحتوي على تعديلات؛ تطابق SHA256 لا يثبت اعتماد PUBG للملف.")
+      .setNegativeButton("إغلاق",null)
+      .setPositiveButton("فحص الملفات",(d,w)->run(()->preflightGameSafety(false)))
+      .show();
+  }
+
+  private static final class SafetyScan {
+    boolean risky=false;
+    boolean incomplete=false;
+    final ArrayList<String> lines=new ArrayList<>();
+    void info(String text){lines.add("• "+text);}
+    void danger(String text){risky=true;lines.add("⚠ "+text);}
+    void unknown(String text){incomplete=true;lines.add("؟ "+text);}
+    String body(){
+      return android.text.TextUtils.join("\n",lines)+
+        "\n\nالفحص المحلي يقلّل المخاطر ولا يثبت أن اللعبة أو الحساب لن يتعرضا للحظر.";
+    }
+  }
+  private String existingFileState(String file)throws Exception{
+    return root("if [ -s '"+file+"' ]; then echo FOUND; elif [ -e '"+file+"' ]; then echo EMPTY; else echo MISSING; fi").trim();
+  }
+  private String fileHash(String path)throws Exception{
+    String hash=root("sha256sum '"+path+"'").trim();
+    if(!hash.matches("(?i)[0-9a-f]{64}.*"))throw new IOException("تعذر التحقق من بصمة "+path);
+    return hash.substring(0,64).toLowerCase(java.util.Locale.US);
+  }
+  private void checkBackupFingerprint(SafetyScan out,String file,String backup,String name)throws Exception{
+    if(!"FOUND".equals(existingFileState(backup))){
+      out.info(name+": لا توجد نسخة YRC احتياطية يمكن مقارنتها.");
+      return;
+    }
+    String current=fileHash(file),old=fileHash(backup);
+    if(current.equals(old)){
+      out.info(name+": يطابق نسخة YRC المحفوظة (لا يعني أنها أصلية رسمية).");
+    }else{
+      out.danger(name+": يختلف عن نسخة YRC المحفوظة. قد يكون تعديلًا أو تحديثًا مشروعًا للعبة.");
+    }
+  }
+  private void inspectIniSafety(SafetyScan out)throws Exception{
+    String path=pubgIniPath();
+    String state=existingFileState(path);
+    if("MISSING".equals(state)){out.info("UserCustom.ini غير موجود. قد تستخدم هذه النسخة إعدادات مختلفة.");return;}
+    if(!"FOUND".equals(state)){out.danger("UserCustom.ini موجود لكنه فارغ.");return;}
+    String bytes64=rootSav("base64 '"+path+"'");
+    byte[] data=android.util.Base64.decode(bytes64,android.util.Base64.DEFAULT);
+    if(data.length<100||data.length>64000){
+      out.unknown("حجم UserCustom.ini غير متوقع؛ لا أستطيع التحقق منه.");
+      return;
+    }
+    String raw=new String(data,java.nio.charset.StandardCharsets.UTF_8);
+    String section="";
+    java.util.HashMap<String,String> actual=new java.util.HashMap<>();
+    java.util.HashMap<String,Integer> repeats=new java.util.HashMap<>();
+    for(String record:raw.split("\\r?\\n")){
+      String line=record.trim();
+      if(line.startsWith("[")&&line.endsWith("]")){section=line;continue;}
+      if(!"[UserCustom DeviceProfile]".equals(section)||!line.startsWith("+CVars="))continue;
+      String hex=line.substring(7);
+      if(hex.length()%2!=0||!hex.matches("[a-fA-F0-9]+"))continue;
+      String decoded=iniDecode(hex);
+      int equals=decoded.indexOf('=');
+      if(equals<=0)continue;
+      String key=decoded.substring(0,equals);
+      actual.put(key,decoded.substring(equals+1));
+      repeats.put(key,repeats.containsKey(key)?repeats.get(key)+1:1);
+    }
+    if(actual.isEmpty()){out.unknown("تعذرت قراءة أي قيم UserCustom من الملف.");return;}
+    String rendered=actual.get("r.MobileContentScaleFactor");
+    if(rendered!=null){
+      try{
+        double scale=Double.parseDouble(rendered);
+        if(scale>1.05)out.danger("Render Scale="+rendered+
+          " أعلى من قيمة 1.0 المستخدمة قبل تجارب YRC. قد يكون تعديلًا غير رسمي.");
+        else out.info("Render Scale="+rendered+" ضمن نطاق الفحص المتوقع.");
+      }catch(NumberFormatException ex){out.unknown("Render Scale غير قابل للتفسير: "+rendered);}
+    }else out.unknown("لم أجد قيمة Render Scale للتحقق.");
+    int matchingMax=0;
+    for(java.util.Map.Entry<String,String> kv:maxGraphicsValues().entrySet()){
+      if(kv.getValue().equals(actual.get(kv.getKey()))&&
+        Integer.valueOf(1).equals(repeats.get(kv.getKey())))matchingMax++;
+    }
+    if(matchingMax>=9)out.danger("تطابق "+matchingMax+" من 18 إعدادًا مع MAX Graphics التجريبي.");
+    int matchingCombined=0;
+    for(java.util.Map.Entry<String,String> kv:combinedGraphicsValues().entrySet()){
+      if(kv.getValue().equals(actual.get(kv.getKey()))&&
+        Integer.valueOf(1).equals(repeats.get(kv.getKey())))matchingCombined++;
+    }
+    if(matchingCombined>=5)out.danger("تطابق "+matchingCombined+" من 7 إعدادات مع ملف الرندر/التفاصيل التجريبي القديم.");
+    if(!prefs.getString("last_graphics_profile_sha","").isEmpty()&&
+      prefs.getString("last_graphics_profile_sha","").equalsIgnoreCase(fileHash(path)))
+      out.danger("UserCustom.ini يطابق ملف تعديل حفظه YRC مسبقًا.");
+    String backup=iniBackupPath();
+    if(!"FOUND".equals(existingFileState(backup))){
+      backup="/sdcard/Download/YRC-PUBG-before-MAX.ini";
+    }
+    checkBackupFingerprint(out,path,backup,"UserCustom.ini");
+  }
+  private void inspectSavSafety(SafetyScan out)throws Exception{
+    String path=activeSavPath();
+    String state=existingFileState(path);
+    if("MISSING".equals(state)){out.info("Active.sav غير موجود في المسار المعتاد لهذا الإصدار.");return;}
+    if(!"FOUND".equals(state)){out.danger("Active.sav موجود لكنه فارغ.");return;}
+    byte[] data;
+    try{data=activeSavBytes();}
+    catch(Exception e){out.unknown("لم أتمكن من قراءة Active.sav كملف GVAS: "+e.getMessage());return;}
+    String[] keys={"BattleFPS","FPSLevel","BattleRenderQuality"};
+    java.util.HashMap<String,Integer> values=new java.util.HashMap<>();
+    for(String key:keys){
+      int at=activePropertyOffset(data,key);
+      if(at<0){out.unknown("لا أستطيع تأكيد حقل "+key+" في Active.sav.");return;}
+      values.put(key,savInt(data,at));
+    }
+    out.info("Active.sav: BattleFPS="+values.get("BattleFPS")+
+      ", FPSLevel="+values.get("FPSLevel")+
+      ", Quality="+values.get("BattleRenderQuality"));
+    if(values.get("BattleFPS")==8&&values.get("FPSLevel")==8&&
+      (values.get("BattleRenderQuality")==5||values.get("BattleRenderQuality")==6)){
+      out.danger("Active.sav يحتوي على نمط HDR/UltraHD + 120FPS الذي يستخدمه YRC.");
+    }
+    if(!prefs.getString("active_graphics_sha","").isEmpty()&&
+      prefs.getString("active_graphics_sha","").equalsIgnoreCase(fileHash(path)))
+      out.danger("Active.sav يطابق تعديل GFX سبق حفظه بواسطة YRC.");
+    checkBackupFingerprint(out,path,activeSavBackup(),"Active.sav");
+  }
+  private void preflightGameSafety(boolean shouldLaunch){
+    SafetyScan report=new SafetyScan();
+    try{
+      if(pkg()==null){report.unknown("لم يتم العثور على PUBG Mobile المثبّتة.");}
+      else{
+        String uid=root("id -u").trim();
+        if(!"0".equals(uid)){report.unknown("صلاحية root غير مؤكدة؛ لا يمكن فحص ملفات اللعبة.");}
+        else{
+          inspectIniSafety(report);
+          inspectSavSafety(report);
+          report.info("تم فحص الملفين في هذه اللحظة فقط؛ قد تتغير الملفات لاحقًا.");
+        }
+      }
+    }catch(Exception e){
+      report.unknown("تعذر إكمال فحص الحماية: "+e.getMessage());
+    }
+    final String detail=report.body();
+    if(report.risky||report.incomplete){
+      message("تم منع التشغيل عبر YRC حتى تراجع فحص السلامة:\n"+detail);
+      if(shouldLaunch){
+        runOnUiThread(()->new AlertDialog.Builder(this)
+          .setTitle(report.risky?"تغييرات قد تعرّض الحساب للحظر":"فحص السلامة غير مكتمل")
+          .setMessage(detail+"\n\nلن يفتح YRC اللعبة تلقائيًا قبل معالجة هذه النتيجة.")
+          .setNegativeButton("إغلاق",null)
+          .setPositiveButton("إرشادات الإصلاح",(d,w)->showOfficialRepairGuide())
+          .show());
+      }
+      return;
+    }
+    if(shouldLaunch){
+      message("لم أجد مؤشرات YRC المعروفة في الملفين. هذا لا يضمن سلامة الحساب.\n"+detail);
+      if(prefs.getBoolean("account_safety_mode",true)){
+        runOnUiThread(()->launchPubgIntent());
+      }else{
+        message("توقف التشغيل: وضع الأمان تغيّر أثناء الفحص. أعد محاولة فتح PUBG.");
+      }
+    }else{
+      message("نتيجة فحص سلامة الملفات:\n"+detail+"\nلا يوجد ضمان لعدم الحظر.");
+    }
   }
 
   @Override protected void onDestroy(){executor.shutdown();super.onDestroy();}
