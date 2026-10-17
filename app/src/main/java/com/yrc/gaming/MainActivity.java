@@ -628,6 +628,7 @@ public class MainActivity extends Activity {
       String tempHash=root("sha256sum '"+temp+"'").trim();
       if(!tempHash.matches("(?s)^[0-9a-f]{64}.*")){message("فشل تجهيز ملف الجودة، لم نكتب إلى اللعبة.");return;}
       stage="كتابة الملف";
+      if(gameFileWritesBlocked("applyIniQuality أثناء تجهيز الكتابة"))return;
       root("cat '"+temp+"' > '"+path+"'");
       stage="التحقق من التعديل";
       String actual=root("sha256sum '"+path+"'").trim();
@@ -745,6 +746,7 @@ public class MainActivity extends Activity {
       String expected=root("sha256sum '"+temp+"'").trim().split(" ")[0];
       if(!expected.matches("[a-fA-F0-9]{64}"))throw new IOException("بصمة الملف المؤقت غير صالحة");
       stage="كتابة إعدادات الجودة";
+      if(gameFileWritesBlocked("applyIniDetails أثناء تجهيز الكتابة"))return;
       root("cat '"+temp+"' > '"+path+"'");
       String actual=root("sha256sum '"+path+"'").trim().split(" ")[0];
       if(!expected.equalsIgnoreCase(actual)){
@@ -910,6 +912,7 @@ public class MainActivity extends Activity {
       root("printf '%s' '"+payload+"' | base64 -d > '"+temp+"'");
       String sha=root("sha256sum '"+temp+"'").trim().split(" ")[0];
       if(!sha.matches("[0-9a-fA-F]{64}"))throw new IOException("تعذر تأكيد بصمة الملف المؤقت");
+      if(gameFileWritesBlocked("applyActiveSavPreset أثناء تجهيز الكتابة"))return;
       root("cat '"+temp+"' > '"+path+"'");
       String applied=root("sha256sum '"+path+"'").trim().split(" ")[0];
       if(!sha.equalsIgnoreCase(applied)){
@@ -1108,6 +1111,7 @@ public class MainActivity extends Activity {
       String expected=root("sha256sum '"+tmp+"'").trim().split(" ")[0];
       if(!expected.matches("[0-9a-fA-F]{64}"))throw new IOException("فشل التحقق من الملف المؤقت");
       stage="كتابة ملف الرسومات";
+      if(gameFileWritesBlocked("applyMaxGraphics أثناء تجهيز الكتابة"))return;
       root("cat '"+tmp+"' > '"+path+"'");
       stage="فحص تطابق الملف";
       String actual=root("sha256sum '"+path+"'").trim().split(" ")[0];
@@ -1261,6 +1265,7 @@ public class MainActivity extends Activity {
       String tempSha=root("sha256sum '"+temp+"'").trim().split(" ")[0];
       if(!tempSha.matches("[a-fA-F0-9]{64}"))throw new IOException("بصمة الملف غير صالحة");
       stage="تعديل UserCustom.ini";
+      if(gameFileWritesBlocked("applyCombinedIniGraphics أثناء تجهيز الكتابة"))return;
       root("cat '"+temp+"' > '"+path+"'");
       stage="التحقق من الكتابة";
       String writtenSha=root("sha256sum '"+path+"'").trim().split(" ")[0];
