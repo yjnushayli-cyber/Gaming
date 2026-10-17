@@ -78,6 +78,11 @@ final class KernelBoost {
     private boolean boost(String path,List<String> report){
         try{
             if(!whitelisted(path))return false;
+            // Idempotent: a second tap must never compound minimum frequencies.
+            if(prefs.contains(PREFIX+path)){
+                report.add(shortName(path)+": وضع Boost مفعّل سابقًا، لم نرفع التردد مرة أخرى.");
+                return false;
+            }
             String savedValue=read(path);
             long current=parse(savedValue);
             String maxName=path.replace("scaling_min_freq","scaling_max_freq").replace("/min_freq","/max_freq");
