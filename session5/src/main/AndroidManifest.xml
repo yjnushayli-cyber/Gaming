@@ -14,6 +14,7 @@
 
     <application
         android:label="YRC Pro 5 Sessions"
+        android:icon="@drawable/ic_yrc_pro5"
         android:usesCleartextTraffic="false"
         android:theme="@android:style/Theme.Material.NoActionBar">
         <activity android:name=".SessionActivity" android:exported="true">
