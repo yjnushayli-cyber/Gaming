@@ -1,3 +1,17 @@
 plugins { id 'com.android.application' }
-android { namespace 'com.yrc.gaming'; compileSdk 35
- defaultConfig { applicationId 'com.yrc.gaming'; minSdk 29; targetSdk 35; versionCode 13; versionName '5.1-cool' } }
+
+android {
+    namespace 'com.yrc.gaming'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.yrc.gaming'
+        minSdk 29
+        targetSdk 35
+        versionCode 14
+        versionName '6.0-rebuild'
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+}
