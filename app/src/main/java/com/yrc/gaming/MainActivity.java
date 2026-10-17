@@ -54,7 +54,7 @@ public class MainActivity extends Activity {
     button("استعادة دقة العرض الأصلية",()->run(()->restoreGraphicsProfile()));
     title("MAX Graphics — رسومات ثقيلة قريبة من PC (تجريبي)");
     label("أعلى تجربة بصرية داخل الملف: رندر 1.50 + ظلال محسّنة + تفاصيل المباني والأشجار والخامات. هذا ليس 4K ولا رسومات PC الحقيقية، وقد تهبط الفريمات بقوة. أغلق PUBG أولًا.");
-    button("تطبيق MAX Graphics من داخل UserCustom.ini",()->confirmMaxGraphics());
+    button("تطبيق MAX Graphics (رندر 1.5 + تفاصيل قصوى)",()->confirmMaxGraphics());
     button("إلغاء MAX وإرجاع الملف لما قبل التجربة",()->new AlertDialog.Builder(this)
       .setTitle("إلغاء MAX Graphics")
       .setMessage("سيعيد ملف الرسومات الذي احتفظنا به قبل تجربة MAX. أغلق PUBG تمامًا قبل الاستعادة.")
@@ -63,7 +63,7 @@ public class MainActivity extends Activity {
     button("فحص ثبات قيم MAX بعد اللعب",()->run(()->verifyIniQualityAfterGame()));
     title("تعديل الرندر والتفاصيل بضغطة واحدة — PUBG");
     label("ملف موحد: رندر 1.15 + 6 إعدادات تفاصيل وخامات من إعدادات اللعبة الاحتياطية. يُكتب إلى UserCustom فقط، وليس إلى Android. لا يضمن استمرار القيم بعد تشغيل اللعبة.");
-    button("تطبيق رندر 1.15 + تفاصيل أعلى داخل PUBG",()->confirmCombinedIniGraphics());
+    button("تطبيق رندر 1.15 + تفاصيل أعلى (لا تستخدمه مع MAX)",()->confirmCombinedIniGraphics());
     button("فحص بقاء جميع تحسينات الرسومات بعد اللعب",()->run(()->verifyIniQualityAfterGame()));
     title("تحسين الرسومات داخل ملف PUBG — تجريبي");
     label("تعديلات غير رسمية للملف. في اختبارك عادت إعدادات التفاصيل بعد اللعب؛ نجاح كتابة CVars لا يعني اعتمادها في المحرك. قد تتجاهلها PUBG وقد يتأثر الحساب. جرّب الخيار الرسمي بالأعلى أولًا.");
@@ -799,7 +799,7 @@ public class MainActivity extends Activity {
         String currentValue=current.get(key);
         java.util.List<String> known=java.util.Arrays.asList(allowed.get(key).split(","));
         if(!known.contains(currentValue)){
-          message("تعذر تطبيق MAX: قيمة غير متوقعة "+key+"="+currentValue+"، لم نعدل الملف.");return;
+          message("MAX لم يغيّر الملف لأن قيمة "+key+" الحالية = "+currentValue+" خارج القيم التي تم اختبارها. أرسل نتيجة فحص الملف؛ لن أفرض قيمة مجهولة.");return;
         }
       }
       int changed=0;
@@ -943,6 +943,10 @@ public class MainActivity extends Activity {
           message("أوقف التعديل: لم أجد قيمة واحدة لـ "+key+" في القسم الحالي.");return;
         }
         String old=oldValues.get(key),val=desired.get(key);
+        if("r.MobileContentScaleFactor".equals(key)&&"1.5".equals(old)){
+          message("الرندر الحالي 1.5 يخص وضع MAX. لا تستخدم وضع 1.15 لأنه أقل؛ اضغط زر تطبيق MAX Graphics في القسم الأعلى، ثم افحص القيم بعد اللعب.");
+          return;
+        }
         boolean known=val.equals(old)||defaults.get(key).equals(old)||
           ("r.MobileContentScaleFactor".equals(key)&&"1.0".equals(old));
         if(!known){
