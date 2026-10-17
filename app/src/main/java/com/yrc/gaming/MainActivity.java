@@ -37,6 +37,30 @@ public class MainActivity extends Activity {
     title("YRC | محرك الألعاب");
     label("إنفينكس GT30 Pro • ببجي موبايل");
     status=label("اختر ملف الأداء ثم اضغط تطبيق. التغييرات على النظام فقط، وليست على ملفات اللعبة.");
+    title("حماية الحساب — وضع آمن (لا يضمن منع الباند)");
+    label("يبدأ مفعّلًا تلقائيًا. يمنع YRC من إجراء تعديلات جديدة على UserCustom.ini وActive.sav، دون إخفاء الروت أو تجاوز مكافحة الغش. أي تغييرات قديمة لا تُلغى تلقائيًا.");
+    CheckBox accountSafety=new CheckBox(this);
+    accountSafety.setText("وضع أمان الحساب: منع تعديل ملفات PUBG");
+    accountSafety.setTextSize(16);
+    accountSafety.setTextColor(Color.WHITE);
+    accountSafety.setChecked(prefs.getBoolean("account_safety_mode",true));
+    layout.addView(accountSafety);
+    accountSafety.setOnCheckedChangeListener((control,checked)->{
+      if(checked){
+        prefs.edit().putBoolean("account_safety_mode",true).apply();
+        message("وضع أمان الحساب مفعّل. YRC لن يكتب تعديلات جديدة لملفات PUBG، لكن التعديلات السابقة قد تظل موجودة.");
+      }else{
+        new AlertDialog.Builder(this).setTitle("تعطيل وضع أمان الحساب")
+          .setMessage("تعطيل الحماية يسمح لتطبيق YRC بتعديل ملفات PUBG غير الرسمية. هذه التعديلات قد تسبب حظر الحساب، ولا يوجد Anti-Ban مضمون. لن نخفي الروت أو نتجاوز كشف مكافحة الغش. هل تريد المتابعة رغم المخاطر؟")
+          .setNegativeButton("إلغاء",(d,w)->accountSafety.setChecked(true))
+          .setPositiveButton("أفهم المخاطر",(d,w)->{
+            prefs.edit().putBoolean("account_safety_mode",false).apply();
+            message("وضع أمان الحساب معطّل بطلبك. تعديل ملفات PUBG قد يسبب حظرًا، حتى إن نجح.");
+          })
+          .setOnCancelListener(d->accountSafety.setChecked(true)).show();
+      }
+    });
+    button("فحص وضع حماية الحساب",()->showAccountSafetyStatus());
     button("فحص صلاحية الروت في KernelSU Next",()->run(()->diagnoseRootAccess()));
     title("ملفات الأداء");
     profiles=new RadioGroup(this);
@@ -139,6 +163,23 @@ public class MainActivity extends Activity {
   private void button(String name,Runnable action){Button b=new Button(this);b.setText(name);layout.addView(b);b.setOnClickListener(v->action.run());}
   private void run(Runnable r){executor.execute(r);}
   private void message(String msg){runOnUiThread(()->status.setText(msg));}
+  private boolean gameFileWritesBlocked(String feature){
+    if(prefs.getBoolean("account_safety_mode",true)){
+      message("وضع أمان الحساب مفعّل: تم منع "+feature+
+        " من تعديل ملفات PUBG. هذه الحماية تقلل التعديل غير المقصود ولا تضمن عدم الحظر. "+
+        "يمكن استرجاع ملفاتك من أزرار الاستعادة بعد إغلاق PUBG.");
+      return true;
+    }
+    return false;
+  }
+  private void showAccountSafetyStatus(){
+    boolean enabled=prefs.getBoolean("account_safety_mode",true);
+    message(enabled?
+      "وضع الأمان: مفعّل. يمنع تعديل الملفات من أزرار GFX/MAX/الرندر داخل YRC. "+
+      "التعديلات القديمة لا تُحذف تلقائيًا. لا توجد حماية تضمن عدم حظر الحساب.":
+      "وضع الأمان: معطّل. يسمح بالتعديل غير الرسمي لملفات PUBG وقد يؤدي للحظر. "+
+      "لخفض المخاطر فعّل الحماية واستعد ملف اللعبة الأصلي من نسخة موثوقة أو أعد تثبيت PUBG رسميًا.");
+  }
   private String root(String cmd)throws Exception{
     String[] suPaths={"su","/system/bin/su","/system/xbin/su","/sbin/su","/su/bin/su"};
     IOException launchFailure=null;
@@ -538,6 +579,7 @@ public class MainActivity extends Activity {
       .setPositiveButton("تطبيق",(d,w)->run(()->applyIniQuality(scale))).show();
   }
   private void applyIniQuality(String scale){
+    if(gameFileWritesBlocked("applyIniQuality"))return;
     String stage="بدء التنفيذ";
     try{
       if(!java.util.Arrays.asList("1.1","1.15","1.25").contains(scale)){message("مستوى غير مدعوم");return;}
@@ -604,6 +646,7 @@ public class MainActivity extends Activity {
       .setPositiveButton("تجربة مع نسخة احتياطية",(d,w)->run(()->applyIniDetails())).show();
   }
   private void applyIniDetails(){
+    if(gameFileWritesBlocked("applyIniDetails"))return;
     String stage="البدء";
     try{
       stage="فحص الروت";
@@ -828,6 +871,7 @@ public class MainActivity extends Activity {
       .setPositiveButton("تجربة",(d,w)->run(()->applyActiveSavPreset(graphics))).show();
   }
   private void applyActiveSavPreset(int graphics){
+    if(gameFileWritesBlocked("applyActiveSavPreset"))return;
     String stage="البدء";
     try{
       if(graphics!=5&&graphics!=6){message("ملف جودة غير معروف");return;}
@@ -984,6 +1028,7 @@ public class MainActivity extends Activity {
       .setPositiveButton("تطبيق MAX",(d,w)->run(()->applyMaxGraphics())).show();
   }
   private void applyMaxGraphics(){
+    if(gameFileWritesBlocked("applyMaxGraphics"))return;
     String stage="البدء";
     try{
       stage="اختبار الروت";root("id");
@@ -1119,6 +1164,7 @@ public class MainActivity extends Activity {
     return desired;
   }
   private void applyCombinedIniGraphics(){
+    if(gameFileWritesBlocked("applyCombinedIniGraphics"))return;
     String stage="البدء";
     try{
       stage="فحص الروت";
