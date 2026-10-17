@@ -16,6 +16,7 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.provider.Settings;
 import android.view.View;
+import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -41,6 +42,7 @@ public class MainActivity extends Activity {
     private SharedPreferences prefs;
     private LinearLayout main;
     private TextView status;
+    private String lastReport="جاهز • تحسينات نظام Android فقط، دون تعديل ملفات PUBG.";
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -51,13 +53,21 @@ public class MainActivity extends Activity {
         LinearLayout frame=new LinearLayout(this);
         frame.setOrientation(LinearLayout.VERTICAL);
         frame.setBackgroundColor(BG);
+        // Android 15/16 enforce edge-to-edge with targetSdk 35. Honor safe areas.
+        frame.setOnApplyWindowInsetsListener((view,insets)->{
+            android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());
+            frame.setPadding(0,bars.top,0,bars.bottom);
+            return insets;
+        });
         setContentView(frame);
+        frame.requestApplyInsets();
 
         status=new TextView(this);
-        status.setText("جاهز • تحسينات الشاشة والنظام فقط — لا تعديل لملفات PUBG");
+        status.setText("جاهز • اضغط هنا لعرض التقرير الكامل");
+        status.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG);
         status.setTextColor(Color.WHITE);
         status.setTextSize(14);
-        status.setMaxLines(4);
+        status.setMaxLines(2);
         status.setEllipsize(android.text.TextUtils.TruncateAt.END);
         status.setPadding(dp(15),dp(13),dp(15),dp(13));
         GradientDrawable panel=new GradientDrawable();
@@ -69,7 +79,7 @@ public class MainActivity extends Activity {
         statParams.setMargins(dp(14),dp(14),dp(14),dp(7));
         frame.addView(status,statParams);
         status.setOnClickListener(v->new AlertDialog.Builder(this)
-            .setTitle("تفاصيل آخر عملية").setMessage(status.getText())
+            .setTitle("التقرير الكامل لآخر عملية").setMessage(lastReport)
             .setPositiveButton("إغلاق",null).show());
 
         ScrollView scroll=new ScrollView(this);
@@ -81,11 +91,11 @@ public class MainActivity extends Activity {
         scroll.addView(main);
         frame.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
 
-        heading("YRC CLEAN 3.1 • 119/120");
+        heading("YRC CLEAN 3.2 • 119/120");
         info("GT30 Pro • PUBG Mobile • أربعة أقسام فقط، بدون تعديل ملفات اللعبة أو تجاوز حدود الحرارة.");
 
         heading("01  ثبات الفريمات");
-        info("إعادة نفس فكرة تجربة 119 FPS السابقة: طلب 120Hz من XOS + وضع أداء Android. ليس قفلًا مضمونًا على 119 أو 120 FPS.");
+        info("نفس إعداد 120Hz الذي اقترب معك سابقًا من 119FPS. وضع Game Mode غير مدعوم للعبة على جهازك؛ سيتم تجاوزه إن رفضه XOS. لا نغيّر حد التحديث الأدنى الديناميكي ولا نضمن قفل FPS.");
         action("تفعيل وضع ثبات 120FPS",()->background(this::applyFpsProfile));
         action("فحص إعداد الفريمات والحرارة",()->background(this::checkFpsProfile));
 
@@ -152,7 +162,12 @@ public class MainActivity extends Activity {
         b.setOnClickListener(v->click.run());
     }
     private void message(String text){
-        runOnUiThread(()->status.setText(text));
+        runOnUiThread(()->{
+            lastReport=text;
+            String first=text.split("\\n",2)[0];
+            if(first.length()>100)first=first.substring(0,100)+"…";
+            status.setText(first+"\nاضغط هنا لقراءة تفاصيل التقرير بالكامل");
+        });
     }
     private void background(Runnable task){
         worker.execute(task);
@@ -229,31 +244,60 @@ public class MainActivity extends Activity {
         try{
             rootReady();
             if(tooHot()){
-                message("الحرارة مرتفعة؛ لم يتم تطبيق الثبات. اترك الجهاز يبرد أولًا.");
+                message("الحرارة مرتفعة؛ لم يتم تغيير أداء الشاشة. انتظر حتى تبرد البطارية ولا تعطّل الحماية الحرارية.");
                 return;
             }
             ArrayList<String> output=new ArrayList<>();
             changeSetting("system","tran_refresh_mode","120");
             changeSetting("system","peak_refresh_rate","120.0");
-            changeSetting("system","min_refresh_rate","120.0");
             changeSetting("global","low_power","0");
-            output.add("XOS: طلب 120Hz، min/peak=120Hz وتوفير الطاقة معطل.");
+            // XOS can legitimately keep an adaptive floor at 60Hz. Do not fight it.
+            if(prefs.contains(prefName("system","min_refresh_rate"))){
+                undoSetting("system","min_refresh_rate",output);
+            }
+            output.add("تم طلب تردد 120Hz وتعطيل توفير الطاقة.");
             if(gameInstalled()){
-                try{
-                    String res=root("cmd game mode 2 "+PUBG);
-                    if(res.toLowerCase(Locale.US).contains("not supported")||
-                        res.toLowerCase(Locale.US).contains("error")){
-                        output.add("Android Game Mode: غير مدعوم / تم رفض الطلب.");
-                    }else{
-                        prefs.edit().putBoolean("clean_requested_game_mode",true).apply();
-                        output.add("Android Game Mode: تم طلب Performance.");
+                if(prefs.getBoolean("clean_game_mode_unavailable",false)){
+                    output.add("Game Mode: الجهاز سبق أن رفض هذا الأمر لـ PUBG؛ تجاهلناه.");
+                }else{
+                    try{
+                        String res=root("cmd game mode 2 "+PUBG);
+                        String lower=res.toLowerCase(Locale.US);
+                        if(lower.contains("not supported")||lower.contains("error")||
+                            lower.contains("unknown")||lower.contains("255")){
+                            prefs.edit().putBoolean("clean_game_mode_unavailable",true).apply();
+                            output.add("Game Mode غير مدعوم للعبة، تم إيقاف تكرار المحاولة.");
+                        }else{
+                            prefs.edit().putBoolean("clean_requested_game_mode",true).apply();
+                            output.add("Game Mode: تم إرسال طلب Performance.");
+                        }
+                    }catch(Exception e){
+                        String error=String.valueOf(e.getMessage());
+                        if(error.toLowerCase(Locale.US).contains("not supported")){
+                            prefs.edit().putBoolean("clean_game_mode_unavailable",true).apply();
+                            output.add("Game Mode غير مدعوم من PUBG/XOS؛ سيتم تجاهل الأمر من الآن.");
+                        }else{
+                            output.add("Game Mode: تعذر تطبيقه، بدون تأثير على إعداد الشاشة. "+error);
+                        }
                     }
-                }catch(Exception e){output.add("وضع أداء اللعبة غير متاح: "+e.getMessage());}
-            }else output.add("PUBG Global غير مثبتة أو غير ظاهرة للتطبيق.");
-            output.add("داخل PUBG اختر Smooth وأعلى FPS رسمي متاح (120FPS عند توفره).");
-            output.add("هذا طلب إعدادات وليس قياس FPS أو ضمان 119 ثابت.");
+                }
+            }
+            String mode=readSetting("system","tran_refresh_mode");
+            String peak=readSetting("system","peak_refresh_rate");
+            String min=readSetting("system","min_refresh_rate");
+            output.add("الفحص الفعلي بعد الطلب:");
+            output.add("XOS="+mode+" | peak="+peak+"Hz | min="+min+"Hz");
+            if(!"120".equals(mode)||!"120.0".equals(peak)){
+                output.add("تنبيه: لم يحتفظ XOS بجميع القيم المطلوبة؛ قد يتولى النظام التحكم بالتحديث.");
+            }
+            output.add("min=60Hz قد يكون طبيعيًا في الوضع التكيفي، ولا يعني أن اللعبة تعمل 60FPS.");
+            output.add("اضبط PUBG رسميًا على Smooth + 120FPS إن كان الخيار متاحًا.");
+            output.add("هذه القيم ليست قياسًا لعدد FPS الحقيقي أثناء اللعب.");
             message(android.text.TextUtils.join("\n",output));
-        }catch(Exception e){message("تعذر تشغيل وضع الفريمات: "+e.getMessage());}
+        }catch(Exception e){
+            message("تعذر تطبيق ملف 120Hz: "+e.getMessage()+
+                "\nيمكنك استخدام زر الاستعادة لإرجاع إعدادات النظام المحفوظة.");
+        }
     }
     private void checkFpsProfile(){
         try{
@@ -268,7 +312,8 @@ public class MainActivity extends Activity {
             if(temp>=0)sb.append("حرارة البطارية: ")
                 .append(String.format(Locale.US,"%.1f",temp/10.0)).append("°C\n");
             sb.append("Thermal status: ").append(thermalStatus()).append("\n");
-            sb.append("ملاحظة: 120Hz معدل تحديث الشاشة وليس قياس FPS الفعلي داخل PUBG. استخدم عداد اللعبة لمقارنة الثبات.");
+            sb.append("الحد الأدنى 60Hz قد يكون XOS Adaptive Refresh Rate؛ هذا لا يثبت 60FPS داخل PUBG.\n");
+            sb.append("120Hz هو معدل تحديث الشاشة، وليس قياس FPS الفعلي. افحص عداد الفريمات أثناء اللعب.");
             message(sb.toString());
         }catch(Exception e){message("تعذر قراءة إعدادات الفريمات: "+e.getMessage());}
     }
