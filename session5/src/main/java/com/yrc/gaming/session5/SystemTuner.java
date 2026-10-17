@@ -181,16 +181,26 @@ final class SystemTuner {
             }
         }catch(Exception e){report.add("DVFS: تعذر الوصول لبعض الواجهات: "+brief(e.getMessage()));}
     }
-    void applyResolution(int percent,List<String> report)throws Exception{
+    void applyResolution(int percent,String aspect,List<String> report)throws Exception{
         if(percent!=95&&percent!=90&&percent!=85)
             throw new IOException("ملف دقة غير مدعوم");
+        if(!("native".equals(aspect)||"16:9".equals(aspect)||"16:10".equals(aspect)))
+            throw new IOException("نسبة عرض غير مدعومة");
         String current=shell("wm size");
         String original=safeDisplaySize(current);
         if(original==null)throw new IOException("لم أتمكن من معرفة أبعاد الشاشة الفعلية");
         int a=Integer.parseInt(original.split("x")[0]);
         int b=Integer.parseInt(original.split("x")[1]);
-        int w=2*((int)Math.round(a*percent/100.0)/2);
-        int h=2*((int)Math.round(b*percent/100.0)/2);
+        int shortSide=Math.min(a,b);
+        int longSide=Math.max(a,b);
+        int shortTarget=2*((int)Math.round(shortSide*percent/100.0)/2);
+        int longTarget;
+        if("16:9".equals(aspect))longTarget=(int)Math.round(shortTarget*16.0/9.0);
+        else if("16:10".equals(aspect))longTarget=(int)Math.round(shortTarget*16.0/10.0);
+        else longTarget=(int)Math.round(longSide*percent/100.0);
+        longTarget=2*(longTarget/2);
+        int w=a<b?shortTarget:longTarget;
+        int h=a<b?longTarget:shortTarget;
         if(w<700||h<1000)throw new IOException("ناتج تصغير الشاشة أصغر من الحد الآمن");
         if(!prefs.contains("s5_original_wm")){
             if(!prefs.edit().putString("s5_original_wm",current).commit())
@@ -200,7 +210,7 @@ final class SystemTuner {
         shell("wm size "+w+"x"+h);
         String verified=shell("wm size");
         if(verified.contains("Override size: "+w+"x"+h))
-            report.add("العرض: "+w+" × "+h+" ("+percent+"% من أبعاد Android)");
+            report.add("العرض: "+w+" × "+h+" (دقة "+percent+"%، النسبة "+aspect+")");
         else report.add("العرض: طلب "+w+"x"+h+" لكن النظام لم يؤكد التنفيذ.");
         report.add("تقليل دقة Android لا يضمن تغيير دقة الرندر الداخلية للعبة.");
     }
