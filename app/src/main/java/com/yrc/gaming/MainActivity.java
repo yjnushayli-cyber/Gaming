@@ -58,6 +58,7 @@ public class MainActivity extends Activity {
     label("قيم مبدئية قابلة للتعديل من إعدادات PUBG. لا يتم تعديل الحساسية داخل اللعبة تلقائيًا أو تشغيل Aim Assist خارجي.");
     button("نسخ حساسية ثبات Aim + سرعة الحركة وفتح PUBG",()->copyAimProfile());
     button("عرض ملف حساسية الجيروسكوب",()->showGyroProfile());
+    button("فحص ملفات حساسية PUBG وربط المسار (روت)",()->run(()->discoverSensitivityFiles()));
     title("التحسينات الإضافية");
     network=check("الشبكة: إبقاء Wi-Fi نشطًا أثناء اتصال الجهاز به",true);
     visual=check("العرض: إلغاء توفير الطاقة وطلب وضع الأداء",true);
@@ -251,6 +252,18 @@ public class MainActivity extends Activity {
       else report+="الاتصال بالراوتر مستقر في هذه العينة؛ قد يكون تذبذب PUBG خارج الشبكة المحلية.";
       message(report);
     }catch(Exception e){message("تعذر اختبار Wi-Fi: "+e.getMessage());}
+  }
+  private void discoverSensitivityFiles(){
+    try{
+      root("id");
+      String base="/sdcard/Android/data/com.tencent.ig/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved";
+      String output=root("find '"+base+"' -maxdepth 5 -type f \\( -iname '*sensitiv*' -o -iname '*control*' -o -iname '*input*' -o -iname '*setting*' \\) 2>/dev/null | head -35");
+      if(output.trim().isEmpty()){
+        message("لم يُعثر على ملف حساسية واضح ضمن إعدادات PUBG المحلية. قد تُخزّن اللعبة الحساسية بصيغة أخرى أو في بيانات خاصة/سحابية. لم نعدّل شيئًا.");
+      }else{
+        message("ملفات محتملة (قراءة فقط):\\n"+output+"\\n\\nلم نثبت أنها تخزن حساسية الجيروسكوب؛ يلزم فحص الصيغة قبل أي تعديل.");
+      }
+    }catch(Exception e){message("تعذر فحص ملفات الحساسية: "+e.getMessage());}
   }
   private String aimProfile(){
     return "YRC GT30 Pro | PUBG 120FPS\\n"+
