@@ -1,0 +1,26 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY"/>
+
+    <queries>
+        <package android:name="com.tencent.ig"/>
+        <package android:name="com.transsion.xarena"/>
+        <package android:name="com.transsion.gamezone"/>
+        <package android:name="com.transsion.xboost"/>
+        <package android:name="com.transsion.gamespace"/>
+        <package android:name="com.infinix.gamezone"/>
+        <package android:name="com.infinix.xarena"/>
+    </queries>
+
+    <application
+        android:label="YRC Pro 5 Sessions"
+        android:usesCleartextTraffic="false"
+        android:theme="@android:style/Theme.Material.NoActionBar">
+        <activity android:name=".SessionActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
