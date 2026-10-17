@@ -76,7 +76,7 @@ final class KernelBoost {
         return m.find()?"GPU "+m.group(1):"GPU";
     }
     // 0 = unavailable/rejected, 1 = actual change, 2 = previously applied and confirmed.
-    private int boost(String path,List<String> report){
+    private int boost(String path,List<String> report,int percent,boolean reduceOldFloors){
         try{
             if(!whitelisted(path))return 0;
             String currentText=read(path);
@@ -91,7 +91,7 @@ final class KernelBoost {
                 report.add(shortName(path)+": التردد الأعلى المتاح لا يسمح برفع الحد الأدنى.");
                 return 0;
             }
-            long goal=baseline+(maximum-baseline)*35/100;
+            long goal=baseline+(maximum-baseline)*percent/100;
             String listName=path.replace("scaling_min_freq","scaling_available_frequencies")
                 .replace("/min_freq","/available_frequencies");
             long target=goal;
@@ -102,17 +102,28 @@ final class KernelBoost {
                 return 0;
             }
 
-            // Old version only read the preferences and said "already enabled".
-            // Verify the actual kernel value instead. If it reset, re-apply the SAME
-            // baseline-derived floor; NEVER calculate another increase from current.
+            // For combat stability, reduce YRC's previously aggressive 35% floor
+            // to the new baseline-derived target. Avoid cumulative boosting.
+            if(backup!=null&&current>target&&reduceOldFloors){
+                write(path,target);
+                long after=parse(read(path));
+                if(after>=baseline&&after<current&&after<=maximum){
+                    report.add(shortName(path)+": خُفّض حد Boost السابق "+current+
+                        " → "+after+" لتقليل الحرارة، الهدف "+target+".");
+                    return 1;
+                }
+                report.add(shortName(path)+": XOS لم يسمح بتخفيض الحد الأدنى ("+
+                    current+" → "+after+").");
+                return 0;
+            }
             if(backup!=null&&current>=target){
-                report.add(shortName(path)+": مؤكد حاليًا "+current+
-                    " (الهدف "+target+"؛ التفعيل السابق ما زال مطبقًا).");
+                report.add(shortName(path)+": الحد الأدنى الحالي "+current+
+                    " يفي بالهدف "+target+"، لم نرفع التردد.");
                 return 2;
             }
             if(current>=target){
-                report.add(shortName(path)+": التردد الحالي "+current+
-                    " يغطي هدف Boost من النظام؛ لا داعي لتغييره.");
+                report.add(shortName(path)+": الحد الحالي "+current+
+                    " كافٍ؛ لا داعي لزيادة حمل الحرارة.");
                 return 0;
             }
 
@@ -143,19 +154,28 @@ final class KernelBoost {
         return text.length()>110?text.substring(0,110):text;
     }
     List<String> apply(){
+        return applyProfile(35,35,false,"Performance");
+    }
+    // Favor sustained FPS over aggressive clocks that can bring thermal throttling.
+    List<String> applyStability(){
+        return applyProfile(12,18,true,"Combat Stability");
+    }
+    private List<String> applyProfile(int cpuPercent,int gpuPercent,
+                                      boolean lowerExisting,String label){
         ArrayList<String> notes=new ArrayList<>();
         int changed=0,confirmed=0,cpuCount=0,gpuCount=0;
+        notes.add(label+": ترددات CPU/GPU بالحد الأدنى وفق القيم المدعومة من النواة.");
         try{
             if(!"0".equals(root("id -u")))throw new IOException("Root permission unavailable");
             String cpuDirs=root("for d in /sys/devices/system/cpu/cpufreq/policy[0-9]*; do [ -f \"$d/scaling_min_freq\" ] && echo \"$d\"; done");
             for(String path:cpuDirs.split("\\r?\\n")){
                 if(!path.matches("/sys/devices/system/cpu/cpufreq/policy[0-9]{1,3}"))continue;
                 if(cpuCount++>=8)break;
-                int result=boost(path+"/scaling_min_freq",notes);
+                int result=boost(path+"/scaling_min_freq",notes,cpuPercent,lowerExisting);
                 if(result==1)changed++;
                 if(result==2)confirmed++;
             }
-            if(cpuCount==0)notes.add("CPU: واجهات cpufreq غير موجودة على هذه النواة.");
+            if(cpuCount==0)notes.add("CPU: لم تتوفر واجهات cpufreq القياسية.");
 
             String gpuDirs=root("for d in /sys/class/devfreq/*; do "+
                 "[ -f \"$d/min_freq\" ] || continue; "+
@@ -164,17 +184,15 @@ final class KernelBoost {
             for(String path:gpuDirs.split("\\r?\\n")){
                 if(!path.matches("/sys/class/devfreq/[A-Za-z0-9_.:-]{1,100}"))continue;
                 if(gpuCount++>=2)break;
-                int result=boost(path+"/min_freq",notes);
+                int result=boost(path+"/min_freq",notes,gpuPercent,lowerExisting);
                 if(result==1)changed++;
                 if(result==2)confirmed++;
             }
-            if(gpuCount==0)notes.add("GPU: لا توجد واجهة devfreq موثوقة؛ تركناه للنظام.");
-        }catch(Exception e){notes.add("Kernel Boost: "+safeError(e));}
-        notes.add("تغييرات تردد جديدة/أُعيد تطبيقها: "+changed+
-            " | إعدادات سابقة تم تأكيد بقائها: "+confirmed);
-        if(changed==0&&confirmed==0)
-            notes.add("لم يتأكد أي Boost لتردد النواة؛ يلزم الاطلاع على أسباب الرفض بالأعلى.");
-        notes.add("لا ترددات قصوى ولا تعطيل للحماية الحرارية ولا تعديل لملفات PUBG.");
+            if(gpuCount==0)notes.add("GPU: لم تتوفر واجهة devfreq موثوقة؛ تركنا التحكم للنظام.");
+        }catch(Exception e){notes.add("Kernel: "+safeError(e));}
+        notes.add("تغييرات مؤكدة الآن: "+changed+" | حدود سابقة ما زالت فعالة: "+confirmed);
+        if(changed==0&&confirmed==0)notes.add("لا يوجد Boost مؤكد؛ بقيت بقية إعدادات العرض مستقلة.");
+        notes.add("لا تعطيل للحماية الحرارية ولا تعديل لتردد GPU/CPU الأقصى أو ملفات PUBG.");
         return notes;
     }
     List<String> restore(){
