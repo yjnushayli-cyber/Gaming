@@ -96,12 +96,16 @@ public final class SessionService extends Service {
         while(!cancelled&&SessionManager.active(this)){
             try{Thread.sleep(10000);}catch(InterruptedException e){break;}
             if(cancelled)break;
-            boolean game=SessionManager.pubgRunning();
-            if(game){
+            Boolean game=SessionManager.pubgRunning();
+            if(game==null){
+                // Root might be unavailable from the background. Never interpret
+                // an unverified state as 'PUBG closed'.
+                successiveMisses=0;
+            }else if(game.booleanValue()){
                 seenGame=true;successiveMisses=0;
             }else if(seenGame){
                 successiveMisses++;
-                // Avoid restoring on a brief game-process transition.
+                // Avoid restoring during brief process transitions.
                 if(successiveMisses>=3){
                     endSession("انتهى تشغيل PUBG؛ أُعيدت إعدادات الجلسة.");
                     break;
