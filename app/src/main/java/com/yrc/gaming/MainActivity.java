@@ -81,7 +81,7 @@ public class MainActivity extends Activity {
         scroll.addView(main);
         frame.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
 
-        heading("YRC CLEAN • 119/120");
+        heading("YRC CLEAN 3.1 • 119/120");
         info("GT30 Pro • PUBG Mobile • أربعة أقسام فقط، بدون تعديل ملفات اللعبة أو تجاوز حدود الحرارة.");
 
         heading("01  ثبات الفريمات");
