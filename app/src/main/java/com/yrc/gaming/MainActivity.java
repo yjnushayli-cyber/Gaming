@@ -91,7 +91,7 @@ public class MainActivity extends Activity {
         scroll.addView(main);
         frame.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
 
-        heading("YRC GAMING PRO 4.1 • BOOST");
+        heading("YRC GAMING PRO 4.2 • BOOST");
         info("GT30 Pro • تحسينات Android فعلية فقط، بدون تعديل ملفات PUBG أو تعطيل الحماية الحرارية.");
         info("Boost يعيد فحص الترددات الحقيقية لـ CPU/GPU، ويعيد تطبيق الحد الأدنى الآمن عند زواله دون مضاعفة الرفع. قد يزيد الحرارة والبطارية، ولا يضمن 119FPS ثابتًا.");
         action("تفعيل YRC COMPETITIVE BOOST",this::confirmCompetitiveBoost);
@@ -107,10 +107,10 @@ public class MainActivity extends Activity {
         action("متوازن 95% — لتخفيف حمل العرض",()->background(()->applyResolution(95)));
         action("إعدادات الرسومات الرسمية الموصى بها",this::showGraphicsGuide);
 
-        heading("03  ثبات البنق");
-        info("وضع Wi-Fi Low Latency رسمي من Android قد يقلّل التأخير إذا دعمه XOS. يزيد استهلاك البطارية ولا يعمل على بيانات الجوال. الاختبار ليس قياسًا لسيرفر PUBG.");
-        action("تفعيل Wi-Fi Low Latency (تجريبي)",()->background(()->setLowLatency(true)));
-        action("إلغاء Wi-Fi Low Latency",()->background(()->setLowLatency(false)));
+        heading("03  ثبات البنق وتقليل الدمج الوهمي");
+        info("زر فعلي للشبكة: يفعّل Wi-Fi Low Latency، ويحاول تعطيل توفير طاقة شريحة Wi-Fi إذا دعمه تعريف الجهاز. قد يقلل التأخير والتذبذب، لكنه لا يغير احتساب إصابات PUBG في السيرفر.");
+        action("تقليل الدمج الوهمي — تحسين الاتصال",this::confirmHitAssist);
+        action("إلغاء تحسين الدمج الوهمي واستعادة Wi-Fi",()->background(this::restoreHitAssist));
         action("فتح إعدادات Wi-Fi والشبكة",()->{
             try{startActivity(new Intent(Settings.ACTION_WIFI_SETTINGS));}
             catch(Exception e){message("تعذّر فتح إعدادات الشبكة: "+e.getMessage());}
@@ -125,7 +125,7 @@ public class MainActivity extends Activity {
         heading("التحكم والاستعادة");
         action("إرجاع إعدادات الشاشة والفريمات الأصلية",()->confirmRestore());
         action("فتح PUBG Mobile",this::launchGame);
-        info("زر الاستعادة يرجع إعدادات CPU/GPU التي حفظها التطبيق ودقة الشاشة وتحديثها والشبكة. قد يرفض XOS بعض إعدادات النواة. لا توجد تغييرات على ملفات اللعبة.");
+        info("زر الاستعادة يرجع إعدادات CPU/GPU والشاشة والشبكة. زر تقليل الدمج الوهمي يحسّن Wi-Fi فقط ولا يستطيع تغيير قرارات إصابات PUBG من السيرفر.");
     }
 
     private int dp(int v){return Math.round(getResources().getDisplayMetrics().density*v);}
@@ -501,33 +501,49 @@ public class MainActivity extends Activity {
             .show();
     }
 
-    private void setLowLatency(boolean enable){
+    private void confirmHitAssist(){
+        new AlertDialog.Builder(this)
+            .setTitle("تقليل الدمج الوهمي — اتصال منخفض التأخير")
+            .setMessage("إذا كنت تقصد إصابة الرصاص دون احتساب الضرر، فهذا مرتبط أيضًا بالسيرفر والمزامنة ولا يوجد حل مضمون من الهاتف.\n\n"+
+                "الزر سيغيّر إعدادات الشبكة فعليًا عند دعمها:\n"+
+                "1. تفعيل Wi-Fi Low Latency من Android.\n"+
+                "2. إيقاف توفير طاقة Wi-Fi من التعريف إذا كان أمر iw مدعومًا.\n"+
+                "3. حفظ الحالة السابقة لاستعادتها.\n\n"+
+                "لن يغيّر أي ملف داخل PUBG. قد يزيد استهلاك البطارية. يتطلب الاتصال بشبكة Wi-Fi.")
+            .setNegativeButton("إلغاء",null)
+            .setPositiveButton("تطبيق التحسين",(d,w)->background(this::applyHitAssist))
+            .show();
+    }
+
+    private void applyHitAssist(){
         try{
             rootReady();
-            if(enable){
-                ConnectivityManager cm=(ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
-                Network net=cm==null?null:cm.getActiveNetwork();
-                NetworkCapabilities caps=net==null||cm==null?null:cm.getNetworkCapabilities(net);
-                if(caps==null||!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)){
-                    message("Wi-Fi Low Latency يعمل على Wi-Fi فقط. اتصل بالشبكة قبل التفعيل.");
-                    return;
-                }
-            }
-            String option=enable?"enabled":"disabled";
-            // AOSP documented shell command; can be absent or unsupported on OEM firmware.
-            String out=root("cmd wifi force-low-latency-mode "+option);
-            String lower=out.toLowerCase(Locale.US);
-            if(lower.contains("failed")||lower.contains("error")||
-               lower.contains("unknown")||lower.contains("not supported")||
-               lower.contains("exception")||lower.contains("usage")){
-                message("لم يقبل XOS تغيير وضع تأخير Wi-Fi. لم نعتبر العملية ناجحة:\n"+out);
+            ConnectivityManager cm=(ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
+            Network wifi=cm==null?null:cm.getActiveNetwork();
+            NetworkCapabilities caps=wifi==null||cm==null?null:cm.getNetworkCapabilities(wifi);
+            if(caps==null||!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)){
+                message("تقليل الدمج الوهمي: الاتصال الحالي ليس Wi-Fi. لا تغييرات؛ هذا الوضع خاص بشبكة Wi-Fi ولا يصلح إصابات السيرفر.");
                 return;
             }
-            prefs.edit().putBoolean("clean_wifi_latency_on",enable).commit();
-            message(enable?
-                "تم إرسال طلب Wi-Fi Low Latency للنظام. قد يقلل التأخير مع Wi-Fi المدعوم، لكنه لا يثبت بنق PUBG ولا يضمن ثباته. قد يزيد استهلاك البطارية. اضغط إلغاء بعد اللعب.":
-                "تم إرسال طلب إلغاء Wi-Fi Low Latency وإعادة الشبكة للوضع المعتاد.");
-        }catch(Exception e){message("لم يمكن تغيير وضع Wi-Fi Low Latency: "+e.getMessage());}
+            android.net.LinkProperties lp=cm.getLinkProperties(wifi);
+            String iface=lp==null?"":lp.getInterfaceName();
+            ArrayList<String> report=new ArrayList<>();
+            report.add("تم تنفيذ أوامر تقليل تأخير اتصال Wi-Fi حيث يدعمها النظام:");
+            report.addAll(new NetworkAssist(prefs).enable(iface));
+            report.add("نتيجة الاتصال قد تختلف داخل PUBG؛ لا ضمان لحل الدمج الوهمي من الهاتف.");
+            message(android.text.TextUtils.join("\n",report));
+        }catch(Exception e){
+            message("تعذّر تنفيذ تحسين الاتصال: "+e.getMessage()+
+                "\nلم نغيّر بيانات PUBG. استخدم زر الاستعادة إذا طُبّق جزء من الإعدادات.");
+        }
+    }
+
+    private void restoreHitAssist(){
+        try{
+            rootReady();
+            List<String> result=new NetworkAssist(prefs).restore();
+            message(android.text.TextUtils.join("\n",result));
+        }catch(Exception e){message("تعذرت استعادة اتصال Wi-Fi: "+e.getMessage());}
     }
 
     private void checkNetwork(){
@@ -596,17 +612,7 @@ public class MainActivity extends Activity {
             undoSetting("system","peak_refresh_rate",out);
             undoSetting("system","min_refresh_rate",out);
             undoSetting("global","low_power",out);
-            if(prefs.getBoolean("clean_wifi_latency_on",false)){
-                try{
-                    String wifiResult=root("cmd wifi force-low-latency-mode disabled");
-                    if(wifiResult.toLowerCase(Locale.US).contains("failed"))
-                        throw new IOException(wifiResult);
-                    prefs.edit().remove("clean_wifi_latency_on").commit();
-                    out.add("Wi-Fi Low Latency: تم طلب الإيقاف");
-                }catch(Exception e){
-                    out.add("تعذر إلغاء Wi-Fi Low Latency: "+e.getMessage());
-                }
-            }
+            out.addAll(new NetworkAssist(prefs).restore());
             if(prefs.getBoolean("clean_requested_game_mode",false)&&gameInstalled()){
                 try{
                     root("cmd game mode 1 "+PUBG);
