@@ -704,6 +704,7 @@ public class MainActivity extends Activity {
       if(raw.length()<100||raw.length()>60000)throw new IOException("ملف الرسومات غير مكتمل");
       String section="",userScale="غير موجود",backupScale="غير موجود";
       String quality="غير معروف",detail="غير معروف",shadows="غير معروف";
+      String material="غير معروف",streaming="غير معروف",meshLOD="غير معروف",particles="غير معروف";
       int userMatches=0, backupMatches=0;
       for(String record:raw.split("\\r?\\n")){
         String line=record.trim();
@@ -721,6 +722,10 @@ public class MainActivity extends Activity {
           if(decoded.startsWith("r.UserQualitySetting="))quality=decoded.substring("r.UserQualitySetting=".length());
           if(decoded.startsWith("r.DetailMode="))detail=decoded.substring("r.DetailMode=".length());
           if(decoded.startsWith("r.UserShadowSwitch="))shadows=decoded.substring("r.UserShadowSwitch=".length());
+          if(decoded.startsWith("r.MaterialQualityLevel="))material=decoded.substring("r.MaterialQualityLevel=".length());
+          if(decoded.startsWith("r.Streaming.PoolSize="))streaming=decoded.substring("r.Streaming.PoolSize=".length());
+          if(decoded.startsWith("r.StaticMeshLODDistanceScale="))meshLOD=decoded.substring("r.StaticMeshLODDistanceScale=".length());
+          if(decoded.startsWith("r.ParticleLODBias="))particles=decoded.substring("r.ParticleLODBias=".length());
         }
       }
       String originalBackup=root("if [ -s '"+iniBackupPath()+"' ]; then echo YES; else echo NO; fi");
@@ -733,6 +738,8 @@ public class MainActivity extends Activity {
         "UserCustom Render Scale: "+userScale+" ("+userMatches+" قيمة)\n"+
         "BackUp Render Scale: "+backupScale+" ("+backupMatches+" قيمة)\n"+
         "Quality="+quality+" / Detail="+detail+" / Shadows="+shadows+"\n"+
+        "Material="+material+" / Texture Pool="+streaming+"\n"+
+        "Mesh LOD="+meshLOD+" / Particles="+particles+"\n"+
         "نسخة استعادة YRC: "+("YES".equals(originalBackup)?"موجودة":"غير موجودة")+
         "\n\n"+assessment+"\nلن أرفع الجودة أكثر قبل التأكد من قبول اللعبة للتعديل.");
     }catch(Exception e){message("تعذر فحص رسومات PUBG بعد اللعب: "+e.getMessage());}
