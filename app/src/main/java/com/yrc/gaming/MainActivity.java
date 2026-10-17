@@ -196,7 +196,7 @@ public class MainActivity extends Activity {
     try{
       String current=root("wm size");
       String physical=null;
-      for(String line:current.split("\\n"))if(line.startsWith("Physical size:"))physical=line.substring(14).trim();
+      for(String line:current.split("\n"))if(line.startsWith("Physical size:"))physical=line.substring(14).trim();
       if(physical==null||!physical.matches("[0-9]+x[0-9]+"))throw new IOException("تعذر معرفة الدقة الأصلية: "+current);
       String[] dims=physical.split("x");
       int shortSide=Math.min(Integer.parseInt(dims[0]),Integer.parseInt(dims[1]));
@@ -204,7 +204,7 @@ public class MainActivity extends Activity {
       longSide-=longSide%2;
       if(!prefs.contains("pc_old_size"))prefs.edit().putString("pc_old_size",current).commit();
       root("wm size "+shortSide+"x"+longSide);
-      message("تم تطبيق شاشة PC 16:9: "+root("wm size")+"\\nللرجوع اضغط «استعادة الشاشة الأصلية».");
+      message("تم تطبيق شاشة PC 16:9: "+root("wm size")+"\nللرجوع اضغط «استعادة الشاشة الأصلية».");
     }catch(Exception e){message("تعذر تفعيل شاشة PC: "+e.getMessage());}
   }
   private void restorePcScreen(){
@@ -212,7 +212,7 @@ public class MainActivity extends Activity {
       String old=prefs.getString("pc_old_size","");
       if(old.isEmpty()){message("لا يوجد مقاس سابق محفوظ. لم نغيّر الشاشة.");return;}
       String override=null;
-      for(String line:old.split("\\n"))if(line.startsWith("Override size:"))override=line.substring(14).trim();
+      for(String line:old.split("\n"))if(line.startsWith("Override size:"))override=line.substring(14).trim();
       if(override!=null&&override.matches("[0-9]+x[0-9]+"))root("wm size "+override);
       else root("wm size reset");
       prefs.edit().remove("pc_old_size").commit();
@@ -250,7 +250,7 @@ public class MainActivity extends Activity {
       double sum=0,jitter=0,max=0;
       for(int i=0;i<vals.size();i++){double v=vals.get(i);sum+=v;max=Math.max(max,v);if(i>0)jitter+=Math.abs(v-vals.get(i-1));}
       double avg=sum/vals.size();jitter=vals.size()>1?jitter/(vals.size()-1):0;
-      String report=String.format(java.util.Locale.US,"Wi-Fi → الراوتر %s\\nفقد الحزم: %s%%\\nمتوسط الاستجابة: %.1f ms\\nأعلى استجابة: %.1f ms\\nالتذبذب التقريبي: %.1f ms\\n",ip,loss.group(1),avg,max,jitter);
+      String report=String.format(java.util.Locale.US,"Wi-Fi → الراوتر %s\nفقد الحزم: %s%%\nمتوسط الاستجابة: %.1f ms\nأعلى استجابة: %.1f ms\nالتذبذب التقريبي: %.1f ms\n",ip,loss.group(1),avg,max,jitter);
       double lost=Double.parseDouble(loss.group(1));
       if(lost>0||jitter>15||max>80)report+="النتيجة: تذبذب محلي محتمل؛ جرّب 5GHz والاقتراب من الراوتر وإيقاف التحميلات.";
       else report+="الاتصال بالراوتر مستقر في هذه العينة؛ قد يكون تذبذب PUBG خارج الشبكة المحلية.";
@@ -266,20 +266,20 @@ public class MainActivity extends Activity {
       for(int i=0;i<paths.length;i++){
         String p=base+paths[i];
         String info=root("if [ -f '"+p+"' ]; then wc -c < '"+p+"'; sha256sum '"+p+"'; else echo MISSING; fi");
-        String[] lines=info.split("\\n");
+        String[] lines=info.split("\n");
         String fingerprint=lines.length>1?lines[0].trim()+" bytes / "+lines[1].trim().split(" ")[0]:"MISSING";
         String key="settings_fingerprint_"+i;
         if(compare){
           String old=prefs.getString(key,"");
-          rows.add(paths[i]+": "+(old.isEmpty()?"لا توجد بصمة سابقة":old.equals(fingerprint)?"لم يتغير":"تغيّر")+"\\n"+fingerprint);
+          rows.add(paths[i]+": "+(old.isEmpty()?"لا توجد بصمة سابقة":old.equals(fingerprint)?"لم يتغير":"تغيّر")+"\n"+fingerprint);
         }else{
           prefs.edit().putString(key,fingerprint).commit();
           rows.add(paths[i]+": "+fingerprint);
         }
       }
       message((compare?"نتيجة المقارنة بعد تغيير الحساسية":"تم حفظ بصمات الملفات قبل تغيير الحساسية")+
-        "\\n"+android.text.TextUtils.join("\\n",rows)+
-        "\\nهذا فحص فقط، ولم يتم تعديل أي ملف. تغيير الملف لا يثبت وحده وجود قيم الجيروسكوب فيه.");
+        "\n"+android.text.TextUtils.join("\n",rows)+
+        "\nهذا فحص فقط، ولم يتم تعديل أي ملف. تغيير الملف لا يثبت وحده وجود قيم الجيروسكوب فيه.");
     }catch(Exception e){message("تعذر فحص بصمات الملفات: "+e.getMessage());}
   }
   private void discoverSensitivityFiles(){
@@ -290,17 +290,17 @@ public class MainActivity extends Activity {
       if(output.trim().isEmpty()){
         message("لم يُعثر على ملف حساسية واضح ضمن إعدادات PUBG المحلية. قد تُخزّن اللعبة الحساسية بصيغة أخرى أو في بيانات خاصة/سحابية. لم نعدّل شيئًا.");
       }else{
-        message("ملفات محتملة (قراءة فقط):\\n"+output+"\\n\\nلم نثبت أنها تخزن حساسية الجيروسكوب؛ يلزم فحص الصيغة قبل أي تعديل.");
+        message("ملفات محتملة (قراءة فقط):\n"+output+"\n\nلم نثبت أنها تخزن حساسية الجيروسكوب؛ يلزم فحص الصيغة قبل أي تعديل.");
       }
     }catch(Exception e){message("تعذر فحص ملفات الحساسية: "+e.getMessage());}
   }
   private String aimProfile(){
-    return "YRC GT30 Pro | PUBG 120FPS\\n"+
-      "Camera (TPP No Scope 115, FPP No Scope 105, Red Dot 55, 2x 40, 3x 28, 4x 22, 6x 12, 8x 10)\\n"+
-      "ADS (TPP No Scope 100, FPP No Scope 95, Red Dot 50, 2x 36, 3x 27, 4x 20, 6x 12, 8x 9)\\n"+
-      "TPP Camera View: highest official available\\n"+
-      "Sprint Sensitivity: 90% (if available)\\n"+
-      "Joystick Size: 110% (if available)\\n"+
+    return "YRC GT30 Pro | PUBG 120FPS\n"+
+      "Camera (TPP No Scope 115, FPP No Scope 105, Red Dot 55, 2x 40, 3x 28, 4x 22, 6x 12, 8x 10)\n"+
+      "ADS (TPP No Scope 100, FPP No Scope 95, Red Dot 50, 2x 36, 3x 27, 4x 20, 6x 12, 8x 9)\n"+
+      "TPP Camera View: highest official available\n"+
+      "Sprint Sensitivity: 90% (if available)\n"+
+      "Joystick Size: 110% (if available)\n"+
       "Adjust in PUBG Settings > Sensitivity and Controls. Test in training ground.";
   }
   private void copyAimProfile(){
@@ -308,15 +308,15 @@ public class MainActivity extends Activity {
     android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
     cm.setPrimaryClip(android.content.ClipData.newPlainText("YRC PUBG sensitivity",values));
     new AlertDialog.Builder(this).setTitle("حساسية Aim + حركة سريعة")
-      .setMessage(values+"\\n\\nتم نسخ القيم. التطبيق لا يغير إعدادات PUBG تلقائيًا.")
+      .setMessage(values+"\n\nتم نسخ القيم. التطبيق لا يغير إعدادات PUBG تلقائيًا.")
       .setNegativeButton("إغلاق",null)
       .setPositiveButton("فتح PUBG",(d,w)->launchGame()).show();
   }
   private void showGyroProfile(){
-    String values="Gyroscope (if enabled)\\nTPP No Scope: 300%\\nFPP No Scope: 300%\\nRed Dot: 300%\\n2x: 280%\\n3x: 230%\\n4x: 190%\\n6x: 90%\\n8x: 65%\\nADS Gyroscope: start with same values. Test recoil on training ground.";
+    String values="Gyroscope (if enabled)\nTPP No Scope: 300%\nFPP No Scope: 300%\nRed Dot: 300%\n2x: 280%\n3x: 230%\n4x: 190%\n6x: 90%\n8x: 65%\nADS Gyroscope: start with same values. Test recoil on training ground.";
     android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
     cm.setPrimaryClip(android.content.ClipData.newPlainText("YRC PUBG gyro",values));
-    new AlertDialog.Builder(this).setTitle("حساسية الجيروسكوب").setMessage(values+"\\n\\nتم نسخ القيم.")
+    new AlertDialog.Builder(this).setTitle("حساسية الجيروسكوب").setMessage(values+"\n\nتم نسخ القيم.")
       .setPositiveButton("تم",null).show();
   }
   private void applyPcLikeProfile(){
@@ -342,9 +342,9 @@ public class MainActivity extends Activity {
       logs.add("PUBG: اترك 120FPS وجرّب Anti-Aliasing 2x فقط، ثم الظلال إذا بقي الأداء مستقرًا.");
       logs.add("TPP: ارفع زاوية كاميرا الشخص الثالث لأعلى قيمة رسمية داخل إعدادات اللعبة.");
       logs.add("زر استعادة دقة العرض الأصلية يعيد إعدادات XOS السابقة.");
-      message(android.text.TextUtils.join("\\n",logs));
+      message(android.text.TextUtils.join("\n",logs));
       runOnUiThread(()->showPcViewGuide());
-    }catch(Exception e){logs.add("تعذر إكمال الملف: "+e.getMessage());message(android.text.TextUtils.join("\\n",logs));}
+    }catch(Exception e){logs.add("تعذر إكمال الملف: "+e.getMessage());message(android.text.TextUtils.join("\n",logs));}
   }
   private void applyGraphicsProfile(boolean stable){
     ArrayList<String> logs=new ArrayList<>();
@@ -364,7 +364,7 @@ public class MainActivity extends Activity {
       catch(Exception e){logs.add("XOS: تعذر طلب 120Hz");}
       if(stable){
         root("wm size 1102x2448");
-        logs.add("دقة عرض Android: "+root("wm size").replace("\\n"," | "));
+        logs.add("دقة عرض Android: "+root("wm size").replace("\n"," | "));
         logs.add("تم تقليل عدد بكسلات العرض نحو 19% لتخفيف الحمل المحتمل؛ لا يضمن تقليل دقة رسم PUBG الداخلية.");
       }else{
         root("wm size reset");
@@ -378,8 +378,8 @@ public class MainActivity extends Activity {
       }
       logs.add("داخل PUBG اختر Smooth + 120FPS، وأوقف Anti-Aliasing وAuto-adjust Graphics إن توفرا.");
       logs.add("لم نعدّل ملفات اللعبة. تحقق من FPS أثناء الاشتباك.");
-      message(android.text.TextUtils.join("\\n",logs));
-    }catch(Exception e){logs.add("فشل التنفيذ: "+e.getMessage());message(android.text.TextUtils.join("\\n",logs));}
+      message(android.text.TextUtils.join("\n",logs));
+    }catch(Exception e){logs.add("فشل التنفيذ: "+e.getMessage());message(android.text.TextUtils.join("\n",logs));}
   }
   private void restoreGraphicsProfile(){
     ArrayList<String> logs=new ArrayList<>();
@@ -400,8 +400,8 @@ public class MainActivity extends Activity {
         prefs.edit().remove(entry[0]).commit();
         logs.add("استعادة "+entry[1]);
       }
-      message(logs.isEmpty()?"لا توجد تغييرات محفوظة للاستعادة":android.text.TextUtils.join("\\n",logs));
-    }catch(Exception e){logs.add("تعذرت الاستعادة: "+e.getMessage());message(android.text.TextUtils.join("\\n",logs));}
+      message(logs.isEmpty()?"لا توجد تغييرات محفوظة للاستعادة":android.text.TextUtils.join("\n",logs));
+    }catch(Exception e){logs.add("تعذرت الاستعادة: "+e.getMessage());message(android.text.TextUtils.join("\n",logs));}
   }
   private void applyGt30Profile(){
     ArrayList<String> logs=new ArrayList<>();
@@ -431,8 +431,8 @@ public class MainActivity extends Activity {
         logs.add("PUBG: اضبط Smooth + 120FPS داخل اللعبة");
       }
       logs.add("لا نعدّل ملفات اللعبة أو نوقف التحكم الحراري.");
-      message(android.text.TextUtils.join("\\n",logs));
-    }catch(Exception e){logs.add("تعذر إكمال الضبط: "+e.getMessage());message(android.text.TextUtils.join("\\n",logs));}
+      message(android.text.TextUtils.join("\n",logs));
+    }catch(Exception e){logs.add("تعذر إكمال الضبط: "+e.getMessage());message(android.text.TextUtils.join("\n",logs));}
   }
   private void diagnoseGt30(){
     try{
@@ -442,10 +442,10 @@ public class MainActivity extends Activity {
       String min=root("settings get system min_refresh_rate");
       String game=pkg();
       String interventions=game==null?"اللعبة غير ظاهرة":root("cmd game list-configs "+game);
-      message("فحص GT30 Pro\\n"+active+"\\nXOS tran_refresh_mode="+mode+
-        "\\npeak="+peak+" / min="+min+"\\nThermal Status="+thermal()+
-        "\\nGame Mode: "+brief(interventions)+
-        "\\nMode 1=144Hz، 2=120Hz، 3=90Hz، 4=60Hz. هذا قياس للشاشة لا FPS اللعبة.");
+      message("فحص GT30 Pro\n"+active+"\nXOS tran_refresh_mode="+mode+
+        "\npeak="+peak+" / min="+min+"\nThermal Status="+thermal()+
+        "\nGame Mode: "+brief(interventions)+
+        "\nMode 1=144Hz، 2=120Hz، 3=90Hz، 4=60Hz. هذا قياس للشاشة لا FPS اللعبة.");
     }catch(Exception e){message("فشل فحص XOS: "+e.getMessage());}
   }
   private void strongMode(){
@@ -493,19 +493,19 @@ public class MainActivity extends Activity {
     try{
       root("id");
       String info=root("if [ -f '"+path+"' ]; then wc -c < '"+path+"'; sha256sum '"+path+"'; else echo MISSING; fi");
-      if(info.contains("MISSING")){message("ملف الرسومات غير موجود في المسار المتوقع:\\n"+path);return;}
-      String[] lines=info.split("\\n");
+      if(info.contains("MISSING")){message("ملف الرسومات غير موجود في المسار المتوقع:\n"+path);return;}
+      String[] lines=info.split("\n");
       prefs.edit().putString("pubg_graphics_path",path).commit();
-      message("تم ربط مسار رسومات PUBG 4.6.0 والتحقق من وجوده:\\n"+path+
-        "\\nالحجم: "+lines[0].trim()+" بايت\\nSHA256: "+(lines.length>1?lines[1].trim().split(" ")[0]:"غير متاح")+
-        "\\nالربط للقراءة والنسخ الاحتياطي فقط؛ أزرار تحسين الشاشة لا تكتب تلقائيًا داخل ملف اللعبة.");
+      message("تم ربط مسار رسومات PUBG 4.6.0 والتحقق من وجوده:\n"+path+
+        "\nالحجم: "+lines[0].trim()+" بايت\nSHA256: "+(lines.length>1?lines[1].trim().split(" ")[0]:"غير متاح")+
+        "\nالربط للقراءة والنسخ الاحتياطي فقط؛ أزرار تحسين الشاشة لا تكتب تلقائيًا داخل ملف اللعبة.");
     }catch(Exception e){message("تعذر التحقق من مسار الرسومات: "+e.getMessage());}
   }
   private void copyGraphicsPath(){
     String path=prefs.getString("pubg_graphics_path",pubgIniPath());
     android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
     cm.setPrimaryClip(android.content.ClipData.newPlainText("PUBG graphics path",path));
-    message("تم نسخ مسار الرسومات:\\n"+path);
+    message("تم نسخ مسار الرسومات:\n"+path);
   }
   private String pubgIniPath(){
     return "/sdcard/Android/data/com.tencent.ig/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/Config/Android/UserCustom.ini";
@@ -517,15 +517,15 @@ public class MainActivity extends Activity {
       String dst="/sdcard/Download/YRC-PUBG-UserCustom-backup.ini";
       root("test -f '"+src+"' && cp -p '"+src+"' '"+dst+"'");
       String size=root("wc -c < '"+dst+"'").trim();
-      message("تم حفظ نسخة احتياطية من إعدادات PUBG في:\\n"+dst+"\\nالحجم: "+size+" بايت\\nلم يتم تعديل ملف اللعبة.");
+      message("تم حفظ نسخة احتياطية من إعدادات PUBG في:\n"+dst+"\nالحجم: "+size+" بايت\nلم يتم تعديل ملف اللعبة.");
     }catch(Exception e){message("تعذر إنشاء النسخة الاحتياطية: "+e.getMessage());}
   }
   private void previewPubgGraphics(){
     try{
       String raw=root("cat '"+pubgIniPath()+"'");
-      StringBuilder out=new StringBuilder("معاينة إعدادات PUBG الحالية (قراءة فقط):\\n");
+      StringBuilder out=new StringBuilder("معاينة إعدادات PUBG الحالية (قراءة فقط):\n");
       int found=0;
-      for(String line:raw.split("\\r?\\n")){
+      for(String line:raw.split("\\r?\n")){
         if(!line.startsWith("+CVars="))continue;
         String hex=line.substring(7).trim();
         if(hex.length()%2!=0||!hex.matches("[0-9A-Fa-f]+"))continue;
@@ -539,7 +539,7 @@ public class MainActivity extends Activity {
           if(found++<25)out.append(value).append('\n');
         }
       }
-      out.append("\\nالنتيجة: ").append(found).append(" إعدادًا ذا صلة. لا يمكن ضمان 4K أو 240FPS من CVars.");
+      out.append("\nالنتيجة: ").append(found).append(" إعدادًا ذا صلة. لا يمكن ضمان 4K أو 240FPS من CVars.");
       message(out.toString());
     }catch(Exception e){message("تعذرت معاينة إعدادات PUBG: "+e.getMessage());}
   }
@@ -550,7 +550,7 @@ public class MainActivity extends Activity {
       String raw=root("cat '"+path+"'");
       if(raw.length()>60000){message("ملف الإعدادات كبير؛ تم إيقاف القراءة الآمنة.");return;}
       String section="";int count=0;StringBuilder report=new StringBuilder("PUBG 4.6.0 | قراءة فقط\n");
-      for(String line:raw.split("\\r?\\n")){
+      for(String line:raw.split("\\r?\n")){
         line=line.trim();
         if(line.startsWith("[")&&line.endsWith("]")){section=line;continue;}
         if(!line.startsWith("+CVars="))continue;
