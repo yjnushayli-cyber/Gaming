@@ -23,19 +23,47 @@ public class MainActivity extends Activity {
     getWindow().setStatusBarColor(BG);
     getWindow().setNavigationBarColor(BG);
     prefs=getSharedPreferences("yrc_profiles",MODE_PRIVATE);
+    // The clean edition re-enables the protection once for users upgrading from older builds.
+    if(!prefs.getBoolean("clean_v2_initialized",false)){
+      prefs.edit().putBoolean("account_safety_mode",true)
+        .putBoolean("clean_v2_initialized",true).commit();
+    }
+    LinearLayout screen=new LinearLayout(this);
+    screen.setOrientation(LinearLayout.VERTICAL);
+    screen.setBackgroundColor(BG);
+    setContentView(screen);
+
+    status=new TextView(this);
+    status.setText("جاهز • وضع أمان الحساب مفعّل. اضغط هنا لقراءة تفاصيل أي نتيجة.");
+    status.setTextColor(Color.WHITE);
+    status.setTextSize(14);
+    status.setMaxLines(5);
+    status.setEllipsize(android.text.TextUtils.TruncateAt.END);
+    status.setPadding(dp(14),dp(12),dp(14),dp(12));
+    android.graphics.drawable.GradientDrawable statusBg=new android.graphics.drawable.GradientDrawable();
+    statusBg.setColor(Color.rgb(21,37,48));
+    statusBg.setCornerRadius(dp(14));
+    statusBg.setStroke(dp(1),ACCENT);
+    status.setBackground(statusBg);
+    LinearLayout.LayoutParams slp=new LinearLayout.LayoutParams(-1,-2);
+    slp.setMargins(dp(12),dp(12),dp(12),dp(6));
+    screen.addView(status,slp);
+    status.setOnClickListener(v->new AlertDialog.Builder(this)
+      .setTitle("نتيجة آخر عملية")
+      .setMessage(status.getText())
+      .setPositiveButton("إغلاق",null).show());
+
     ScrollView scroll=new ScrollView(this);
     scroll.setFillViewport(true);
     layout=new LinearLayout(this);
     layout.setOrientation(LinearLayout.VERTICAL);
     layout.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-    layout.setPadding(28,24,28,48);
-    layout.setBackgroundColor(BG);
+    layout.setPadding(dp(18),dp(12),dp(18),dp(36));
     scroll.addView(layout);
-    setContentView(scroll);
+    screen.addView(scroll,new LinearLayout.LayoutParams(-1,0,1f));
 
     title("YRC Gaming Pro  |  Clean 2.0");
-    label("Infinix GT30 Pro • PUBG Mobile • إصدار مختصر بدون الأدوات القديمة");
-    status=label("جاهز. الوضع الآمن مفعّل تلقائيًا. لا نضمن عدم الباند ولا نتجاوز أنظمة مكافحة الغش.");
+    label("Infinix GT30 Pro • PUBG Mobile • نسخة مركزة على ما تحتاجه");
 
     title("01  |  حماية الحساب");
     label("وضع الأمان يمنع تعديل ملفات PUBG الجديدة عبر YRC. لا يخفي الروت ولا يلغي أي تعديلات سابقة؛ ولا يوجد ضمان لمنع الحظر.");
@@ -103,14 +131,46 @@ public class MainActivity extends Activity {
     label("الاستعادة من نسخة YRC ليست إصلاحًا مضمونًا لكل ملفات PUBG. إذا فقدت النسخة الأصلية، استخدم ميزة Repair الرسمية داخل اللعبة.");
   }
 
-  private void title(String s){TextView t=label(s);t.setTextSize(23);t.setTextColor(ACCENT);t.setPadding(0,24,0,10);}
-
-  private TextView label(String s){TextView t=new TextView(this);t.setText(s);t.setTextSize(15);t.setTextColor(Color.WHITE);t.setPadding(0,10,0,10);layout.addView(t);return t;}
-
-  private void button(String name,Runnable action){Button b=new Button(this);b.setText(name);layout.addView(b);b.setOnClickListener(v->action.run());}
-
+  private int dp(int value){
+    return Math.round(getResources().getDisplayMetrics().density*value);
+  }
+  private void title(String name){
+    TextView t=label(name);
+    t.setTextSize(20);
+    t.setTypeface(android.graphics.Typeface.DEFAULT,android.graphics.Typeface.BOLD);
+    t.setTextColor(ACCENT);
+    t.setPadding(0,dp(23),0,dp(8));
+  }
+  private TextView label(String text){
+    TextView t=new TextView(this);
+    t.setText(text);
+    t.setTextSize(14);
+    t.setLineSpacing(dp(3),1f);
+    t.setTextColor(Color.rgb(221,229,236));
+    t.setPadding(dp(3),dp(7),dp(3),dp(10));
+    layout.addView(t);
+    return t;
+  }
+  private void button(String name,Runnable action){
+    Button b=new Button(this);
+    b.setText(name);
+    b.setTextSize(14);
+    b.setAllCaps(false);
+    b.setTextColor(Color.WHITE);
+    boolean restore=name.contains("إلغاء جميع")||name.contains("الرجوع للنسخ");
+    boolean diagnostic=name.contains("فحص")||name.contains("فتح إعدادات");
+    int bg=restore?Color.rgb(129,72,36):diagnostic?Color.rgb(43,67,79):Color.rgb(38,109,103);
+    android.graphics.drawable.GradientDrawable drawable=new android.graphics.drawable.GradientDrawable();
+    drawable.setColor(bg);
+    drawable.setCornerRadius(dp(11));
+    drawable.setStroke(dp(1),restore?Color.rgb(205,140,78):Color.rgb(69,144,140));
+    b.setBackground(drawable);
+    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(52));
+    lp.setMargins(0,dp(3),0,dp(7));
+    layout.addView(b,lp);
+    b.setOnClickListener(v->action.run());
+  }
   private void run(Runnable r){executor.execute(r);}
-
   private void message(String msg){runOnUiThread(()->status.setText(msg));}
 
   private boolean gameFileWritesBlocked(String feature){
@@ -832,6 +892,7 @@ public class MainActivity extends Activity {
   }
   private void restoreOriginalConfigs(){
     ArrayList<String> report=new ArrayList<>();
+    prefs.edit().putBoolean("account_safety_mode",true).commit();
     try{
       root("id");
       if(!root("pidof com.tencent.ig 2>/dev/null || true").trim().isEmpty()){
