@@ -834,6 +834,9 @@ public class MainActivity extends Activity {
       String quality="غير معروف",detail="غير معروف",shadows="غير معروف";
       String material="غير معروف",streaming="غير معروف",meshLOD="غير معروف",particles="غير معروف";
       int userMatches=0, backupMatches=0;
+      java.util.HashMap<String,String> activeGraphics=new java.util.HashMap<>();
+      java.util.HashMap<String,Integer> seenGraphics=new java.util.HashMap<>();
+      java.util.LinkedHashMap<String,String> expectedGraphics=combinedGraphicsValues();
       for(String record:raw.split("\\r?\\n")){
         String line=record.trim();
         if(line.startsWith("[")&&line.endsWith("]")){section=line;continue;}
@@ -847,6 +850,14 @@ public class MainActivity extends Activity {
           if("[BackUp DeviceProfile]".equals(section)){backupScale=value;backupMatches++;}
         }
         if("[UserCustom DeviceProfile]".equals(section)){
+          int eq=decoded.indexOf('=');
+          if(eq>0){
+            String key=decoded.substring(0,eq),val=decoded.substring(eq+1);
+            if(expectedGraphics.containsKey(key)){
+              activeGraphics.put(key,val);
+              seenGraphics.put(key,seenGraphics.containsKey(key)?seenGraphics.get(key)+1:1);
+            }
+          }
           if(decoded.startsWith("r.UserQualitySetting="))quality=decoded.substring("r.UserQualitySetting=".length());
           if(decoded.startsWith("r.DetailMode="))detail=decoded.substring("r.DetailMode=".length());
           if(decoded.startsWith("r.UserShadowSwitch="))shadows=decoded.substring("r.UserShadowSwitch=".length());
@@ -856,18 +867,32 @@ public class MainActivity extends Activity {
           if(decoded.startsWith("r.ParticleLODBias="))particles=decoded.substring("r.ParticleLODBias=".length());
         }
       }
+      int keptGraphics=0;
+      java.util.ArrayList<String> reverted=new java.util.ArrayList<>();
+      for(String key:expectedGraphics.keySet()){
+        if(expectedGraphics.get(key).equals(activeGraphics.get(key))&&Integer.valueOf(1).equals(seenGraphics.get(key)))keptGraphics++;
+        else reverted.add(key+" = "+(activeGraphics.containsKey(key)?activeGraphics.get(key):"غير موجود"));
+      }
+      String previousHash=prefs.getString("last_graphics_profile_sha","");
+      String actualHash=root("sha256sum '"+file+"'").trim().split(" ")[0];
+      String hashReport=previousHash.isEmpty()?"لا توجد بصمة محفوظة لهذا الوضع":
+        previousHash.equalsIgnoreCase(actualHash)?"مطابق لملف تطبيق الجودة":"الملف تغيّر بعد تطبيق الجودة";
       String originalBackup=root("if [ -s '"+iniBackupPath()+"' ]; then echo YES; else echo NO; fi");
-      boolean enhanced="1.1".equals(userScale)||"1.15".equals(userScale)||"1.25".equals(userScale);
       String assessment;
-      if(userMatches!=1)assessment="لم أجد قيمة رندر واحدة مؤكدة في القسم الحالي؛ لا تعدّل الملف الآن.";
-      else if(enhanced)assessment="قيمة التحسين لا تزال مكتوبة في ملف PUBG. هذا لا يثبت أن محرك اللعبة يستخدمها بصريًا.";
-      else assessment="قيمة التحسين غير موجودة الآن في القسم الحالي. قد تكون PUBG أعادت الإعداد، أو تم استرجاع الملف.";
+      if(userMatches!=1)assessment="لم أجد قيمة رندر واحدة مؤكدة في القسم الحالي.";
+      else if(keptGraphics==expectedGraphics.size())
+        assessment="القيم السبع لا تزال مكتوبة بعد اللعب. هذا لا يثبت أن PUBG استخدمتها في الرسومات الفعلية.";
+      else
+        assessment="قيم لم تستمر بعد اللعب: "+android.text.TextUtils.join("، ",reverted)+
+          "\nقد تكون PUBG أعادتها لإعداداتها؛ لا يمكن تثبيت التحسين قسرًا بأمان داخل ملف اللعبة.";
       message("فحص PUBG بعد اللعب (قراءة فقط)\n"+
         "UserCustom Render Scale: "+userScale+" ("+userMatches+" قيمة)\n"+
         "BackUp Render Scale: "+backupScale+" ("+backupMatches+" قيمة)\n"+
         "Quality="+quality+" / Detail="+detail+" / Shadows="+shadows+"\n"+
         "Material="+material+" / Texture Pool="+streaming+"\n"+
         "Mesh LOD="+meshLOD+" / Particles="+particles+"\n"+
+        "بقاء إعدادات ملف الجودة: "+keptGraphics+"/"+expectedGraphics.size()+"\n"+
+        "بصمة الملف: "+hashReport+"\n"+
         "نسخة استعادة YRC: "+("YES".equals(originalBackup)?"موجودة":"غير موجودة")+
         "\n\n"+assessment+"\nلن أرفع الجودة أكثر قبل التأكد من قبول اللعبة للتعديل.");
     }catch(Exception e){message("تعذر فحص رسومات PUBG بعد اللعب: "+e.getMessage());}
