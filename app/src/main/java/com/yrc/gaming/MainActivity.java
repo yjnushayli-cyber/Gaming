@@ -56,6 +56,7 @@ public class MainActivity extends Activity {
     button("تطبيق تحسين وضوح 10% داخل UserCustom.ini",()->new AlertDialog.Builder(this).setTitle("تعديل ملف رسومات PUBG").setMessage("سيُنشئ التطبيق نسخة احتياطية ثم يرفع r.MobileContentScaleFactor من 1 إلى 1.1 إن كانت القيمة موجودة. هذا تعديل غير رسمي وقد لا تقبله اللعبة أو قد يعرّض الحساب للقيود. أغلق PUBG قبل المتابعة.").setNegativeButton("إلغاء",null).setPositiveButton("تطبيق", (d,w)->run(()->applyIniClarity())).show());
     button("وضوح أعلى 15% — تعديل داخل PUBG",()->confirmIniQuality("1.15"));
     button("وضوح أعلى 25% — تجريبي ثقيل",()->confirmIniQuality("1.25"));
+    button("افحص هل PUBG احتفظت بتحسين الوضوح بعد اللعب",()->run(()->verifyIniQualityAfterGame()));
     button("استعادة ملف رسومات PUBG من النسخة الاحتياطية",()->run(()->restoreIniClarity()));
     title("رسومات أوضح + منظور TPP واسع");
     label("ملف موحد يحافظ على دقة الشاشة الأصلية و120Hz، ثم يفتح إرشادات رفع TPP من داخل PUBG. لا يغيّر ملفات اللعبة أو يزعم 4K/240FPS.");
@@ -522,6 +523,49 @@ public class MainActivity extends Activity {
       root("rm -f '"+temp+"'");
       message("تمت كتابة قيمة الرندر "+scale+" والتحقق من الملف. نسخة الاستعادة: "+backup+"\nالحد الرسمي 120FPS لم يتغير. جرّب FPS وجودة الصورة؛ قد تتجاهل اللعبة القيمة.");
     }catch(Exception e){message("تعذر تعديل PUBG عند «"+stage+"»: "+e.getMessage());}
+  }
+  private void verifyIniQualityAfterGame(){
+    try{
+      root("id");
+      String file=pubgIniPath();
+      String encoded=root("base64 '"+file+"'");
+      byte[] bytes=android.util.Base64.decode(encoded,android.util.Base64.DEFAULT);
+      String raw=new String(bytes,java.nio.charset.StandardCharsets.UTF_8);
+      if(raw.length()<100||raw.length()>60000)throw new IOException("ملف الرسومات غير مكتمل");
+      String section="",userScale="غير موجود",backupScale="غير موجود";
+      String quality="غير معروف",detail="غير معروف",shadows="غير معروف";
+      int userMatches=0, backupMatches=0;
+      for(String record:raw.split("\\r?\\n")){
+        String line=record.trim();
+        if(line.startsWith("[")&&line.endsWith("]")){section=line;continue;}
+        if(!line.startsWith("+CVars="))continue;
+        String hex=line.substring(7);
+        if((hex.length()&1)!=0||!hex.matches("[A-Fa-f0-9]+"))continue;
+        String decoded=iniDecode(hex);
+        if(decoded.startsWith("r.MobileContentScaleFactor=")){
+          String value=decoded.substring("r.MobileContentScaleFactor=".length());
+          if("[UserCustom DeviceProfile]".equals(section)){userScale=value;userMatches++;}
+          if("[BackUp DeviceProfile]".equals(section)){backupScale=value;backupMatches++;}
+        }
+        if("[UserCustom DeviceProfile]".equals(section)){
+          if(decoded.startsWith("r.UserQualitySetting="))quality=decoded.substring("r.UserQualitySetting=".length());
+          if(decoded.startsWith("r.DetailMode="))detail=decoded.substring("r.DetailMode=".length());
+          if(decoded.startsWith("r.UserShadowSwitch="))shadows=decoded.substring("r.UserShadowSwitch=".length());
+        }
+      }
+      String originalBackup=root("if [ -s '"+iniBackupPath()+"' ]; then echo YES; else echo NO; fi");
+      boolean enhanced="1.1".equals(userScale)||"1.15".equals(userScale)||"1.25".equals(userScale);
+      String assessment;
+      if(userMatches!=1)assessment="لم أجد قيمة رندر واحدة مؤكدة في القسم الحالي؛ لا تعدّل الملف الآن.";
+      else if(enhanced)assessment="قيمة التحسين لا تزال مكتوبة في ملف PUBG. هذا لا يثبت أن محرك اللعبة يستخدمها بصريًا.";
+      else assessment="قيمة التحسين غير موجودة الآن في القسم الحالي. قد تكون PUBG أعادت الإعداد، أو تم استرجاع الملف.";
+      message("فحص PUBG بعد اللعب (قراءة فقط)\n"+
+        "UserCustom Render Scale: "+userScale+" ("+userMatches+" قيمة)\n"+
+        "BackUp Render Scale: "+backupScale+" ("+backupMatches+" قيمة)\n"+
+        "Quality="+quality+" / Detail="+detail+" / Shadows="+shadows+"\n"+
+        "نسخة استعادة YRC: "+("YES".equals(originalBackup)?"موجودة":"غير موجودة")+
+        "\n\n"+assessment+"\nلن أرفع الجودة أكثر قبل التأكد من قبول اللعبة للتعديل.");
+    }catch(Exception e){message("تعذر فحص رسومات PUBG بعد اللعب: "+e.getMessage());}
   }
   private void restoreIniClarity(){
     try{
