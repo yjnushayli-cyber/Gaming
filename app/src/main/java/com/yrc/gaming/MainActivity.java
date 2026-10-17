@@ -56,6 +56,10 @@ public class MainActivity extends Activity {
     button("تفعيل شاشة PC المصغّرة 16:9",()->new AlertDialog.Builder(this).setTitle("تصغير مساحة العرض إلى 16:9").setMessage("هذا يغيّر دقة عرض نظام الهاتف مؤقتًا وقد يسبب أشرطة سوداء أو تغيير أماكن اللمس. لا يغيّر كاميرا ببجي الحقيقية. هل تريد التطبيق؟").setNegativeButton("إلغاء",null).setPositiveButton("تفعيل",(d,w)->run(()->applyPcScreen())).show());
     button("استعادة الشاشة الأصلية",()->run(()->restorePcScreen()));
     button("إرشادات زاوية كاميرا TPP",()->showPcViewGuide());
+    title("ضبط GT30 Pro بناءً على فحص جهازك");
+    label("XOS: tran_refresh_mode=120، الشاشة تدعم 120/144Hz، وPUBG تعرض 120FPS كحد أعلى. يطبّق وضعًا قابلًا للاستعادة ويتحقق من النتائج.");
+    button("تطبيق إعداد 120FPS المستقر (روت)",()->run(()->applyGt30Profile()));
+    button("فحص وضع الشاشة وقيود XOS",()->run(()->diagnoseGt30()));
     title("خيارات متقدمة قابلة للتطبيق");
     button("طلب شاشة 144Hz والتحقق من استجابة XOS",()->run(()->request144()));
     button("وضع أداء قوي قابل للاستعادة (روت)",()->new AlertDialog.Builder(this).setTitle("تطبيق أداء قوي").setMessage("سيطلب 144Hz ويعطل توفير الطاقة ويطلب Game Mode performance و120FPS. لا يغيّر حرارة الجهاز أو ملفات اللعبة، وقد يتجاهل XOS بعض الطلبات.").setNegativeButton("إلغاء",null).setPositiveButton("تطبيق",(d,w)->run(()->strongMode())).show());
@@ -234,6 +238,51 @@ public class MainActivity extends Activity {
       message(report);
     }catch(Exception e){message("تعذر اختبار Wi-Fi: "+e.getMessage());}
   }
+  private void applyGt30Profile(){
+    ArrayList<String> logs=new ArrayList<>();
+    try{
+      root("id");
+      if(thermal()>=PowerManager.THERMAL_STATUS_SEVERE||temperature()>=420){
+        message("الحرارة مرتفعة؛ لن يتم تفعيل ملف الأداء الآن.");return;
+      }
+      setSetting("global","low_power","0");
+      logs.add("توفير الطاقة: متوقف");
+      saveSetting("system","tran_refresh_mode");
+      saveSetting("system","last_tran_refresh_mode_in_refresh_setting");
+      setSetting("system","tran_refresh_mode","120");
+      logs.add("وضع XOS المطلوب: 120Hz");
+      setSetting("system","peak_refresh_rate","120.0");
+      logs.add("الحد الأعلى المطلوب: 120Hz");
+      String min=root("settings get system min_refresh_rate");
+      logs.add("الحد الأدنى الذي يفرضه XOS: "+min+" (لم نحاول تجاوزه)");
+      String active=root("dumpsys display | grep 'mActiveModeId=' | head -1");
+      logs.add("الوضع الحالي: "+active.trim()+" (قد يتغير حسب التطبيق)");
+      String game=pkg();
+      if(game!=null){
+        try{
+          String out=root("cmd game mode 2 "+game);
+          logs.add(looksLikeHelp(out)?"Game Mode: غير مدعوم":"Game Mode: تم إرسال طلب الأداء");
+        }catch(Exception e){logs.add("Game Mode: رفضه النظام");}
+        logs.add("PUBG: اضبط Smooth + 120FPS داخل اللعبة");
+      }
+      logs.add("لا نعدّل ملفات اللعبة أو نوقف التحكم الحراري.");
+      message(android.text.TextUtils.join("\\n",logs));
+    }catch(Exception e){logs.add("تعذر إكمال الضبط: "+e.getMessage());message(android.text.TextUtils.join("\\n",logs));}
+  }
+  private void diagnoseGt30(){
+    try{
+      String active=root("dumpsys display | grep 'mActiveModeId=' | head -1").trim();
+      String mode=root("settings get system tran_refresh_mode");
+      String peak=root("settings get system peak_refresh_rate");
+      String min=root("settings get system min_refresh_rate");
+      String game=pkg();
+      String interventions=game==null?"اللعبة غير ظاهرة":root("cmd game list-configs "+game);
+      message("فحص GT30 Pro\\n"+active+"\\nXOS tran_refresh_mode="+mode+
+        "\\npeak="+peak+" / min="+min+"\\nThermal Status="+thermal()+
+        "\\nGame Mode: "+brief(interventions)+
+        "\\nMode 1=144Hz، 2=120Hz، 3=90Hz، 4=60Hz. هذا قياس للشاشة لا FPS اللعبة.");
+    }catch(Exception e){message("فشل فحص XOS: "+e.getMessage());}
+  }
   private void strongMode(){
     String game=pkg();if(game==null){message("ببجي غير موجودة");return;}
     ArrayList<String> logs=new ArrayList<>();
@@ -257,7 +306,7 @@ public class MainActivity extends Activity {
   private void stopStrongMode(){
     ArrayList<String> logs=new ArrayList<>();
     try{root("id");}catch(Exception e){message("صلاحية الروت غير متاحة");return;}
-    for(String[] entry:new String[][]{{"global","low_power"},{"system","peak_refresh_rate"},{"system","min_refresh_rate"}}){
+    for(String[] entry:new String[][]{{"global","low_power"},{"system","peak_refresh_rate"},{"system","min_refresh_rate"},{"system","tran_refresh_mode"},{"system","last_tran_refresh_mode_in_refresh_setting"}}){
       String table=entry[0],key=entry[1],pref="old_"+table+"_"+key;
       if(!prefs.contains(pref))continue;
       try{
