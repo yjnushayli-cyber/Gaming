@@ -87,6 +87,9 @@ public final class SessionService extends Service {
         long start=SystemClock.elapsedRealtime();
         boolean gameSeen=false;
         int consecutiveStops=0;
+        int highHzSamples=0;
+        int lowHzSamples=0;
+        int middleHzSamples=0;
         while(!interrupted&&SessionEngine.active(this)){
             try{Thread.sleep(10000);}catch(InterruptedException e){break;}
             if(interrupted)break;
@@ -94,6 +97,17 @@ public final class SessionService extends Service {
             Boolean running=SessionEngine.pubgIsRunning();
             if(Boolean.TRUE.equals(running)){
                 gameSeen=true;consecutiveStops=0;
+                // Read-only Android display sampling WHILE the PUBG process runs.
+                // Does not read PUBG FPS or modify PUBG's renderer.
+                float modeHz=currentPanelRefresh();
+                if(modeHz>=110f)highHzSamples++;
+                else if(modeHz>=45f&&modeHz<75f)lowHzSamples++;
+                else if(modeHz>0f)middleHzSamples++;
+                SessionEngine.prefs(this).edit()
+                    .putInt("v6_samples_110plus",highHzSamples)
+                    .putInt("v6_samples_60",lowHzSamples)
+                    .putInt("v6_samples_other",middleHzSamples)
+                    .apply();
             }else if(Boolean.FALSE.equals(running)){
                 if(gameSeen){
                     consecutiveStops++;
@@ -120,13 +134,30 @@ public final class SessionService extends Service {
         }
     }
 
+    private float currentPanelRefresh(){
+        try{
+            android.hardware.display.DisplayManager dm=
+                (android.hardware.display.DisplayManager)
+                    getSystemService(Context.DISPLAY_SERVICE);
+            android.view.Display d=dm==null?null:
+                dm.getDisplay(android.view.Display.DEFAULT_DISPLAY);
+            return d==null?-1f:d.getRefreshRate();
+        }catch(Exception ignored){return -1f;}
+    }
+
     private void finish(String reason){
         if(!closing.compareAndSet(false,true))return;
         interrupted=true;
         new Thread(()->{
             try{
                 List<String> report=SessionEngine.restore(getApplicationContext());
-                String full=reason+"\n"+android.text.TextUtils.join("\n",report);
+                int a=SessionEngine.prefs(this).getInt("v6_samples_110plus",0);
+                int b=SessionEngine.prefs(this).getInt("v6_samples_60",0);
+                int c=SessionEngine.prefs(this).getInt("v6_samples_other",0);
+                String displaySample="عينات وضع الشاشة أثناء تشغيل PUBG (كل 10 ثوان تقريبًا): "+
+                    "110Hz فأعلى="+a+" | حول 60Hz="+b+" | أخرى="+c+
+                    "\\nهذه قراءة تحديث الشاشة وليست FPS اللعبة أو قياسًا لثبات الرندر.";
+                String full=reason+"\\n"+displaySample+"\\n"+android.text.TextUtils.join("\\n",report);
                 SessionEngine.prefs(this).edit().putString(SessionEngine.REPORT,full).commit();
             }catch(Exception e){
                 SessionEngine.prefs(this).edit().putString(SessionEngine.REPORT,
