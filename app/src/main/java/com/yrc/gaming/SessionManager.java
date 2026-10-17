@@ -155,6 +155,10 @@ final class SessionManager {
             try{
                 notes.addAll(new KernelBoost(p).restore());
             }catch(Exception e){notes.add("استعادة الترددات السابقة: "+shortError(e));}
+            if(!p.getString("boost4_paths","").isEmpty()){
+                notes.add("بقيت إعدادات ترددات قديمة لم تؤكد النواة استعادتها؛ أوقف الجلسة وأعد تشغيل الهاتف عند الحاجة.");
+                return new StartResult(false,android.text.TextUtils.join("\n",notes));
+            }
             int battery=batteryTenths(ctx);
             int thermalState=thermal(ctx);
             if(thermalState>=PowerManager.THERMAL_STATUS_MODERATE||
