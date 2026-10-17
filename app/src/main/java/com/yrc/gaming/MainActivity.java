@@ -59,6 +59,8 @@ public class MainActivity extends Activity {
     button("نسخ حساسية ثبات Aim + سرعة الحركة وفتح PUBG",()->copyAimProfile());
     button("عرض ملف حساسية الجيروسكوب",()->showGyroProfile());
     button("فحص ملفات حساسية PUBG وربط المسار (روت)",()->run(()->discoverSensitivityFiles()));
+    button("تسجيل بصمة ملفات التحكم قبل تغيير الحساسية",()->run(()->snapshotPubgSettings(false)));
+    button("مقارنة ملفات التحكم بعد تغيير الحساسية",()->run(()->snapshotPubgSettings(true)));
     title("التحسينات الإضافية");
     network=check("الشبكة: إبقاء Wi-Fi نشطًا أثناء اتصال الجهاز به",true);
     visual=check("العرض: إلغاء توفير الطاقة وطلب وضع الأداء",true);
@@ -252,6 +254,31 @@ public class MainActivity extends Activity {
       else report+="الاتصال بالراوتر مستقر في هذه العينة؛ قد يكون تذبذب PUBG خارج الشبكة المحلية.";
       message(report);
     }catch(Exception e){message("تعذر اختبار Wi-Fi: "+e.getMessage());}
+  }
+  private void snapshotPubgSettings(boolean compare){
+    String base="/sdcard/Android/data/com.tencent.ig/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/";
+    String[] paths={"SaveGames/SettingConfig_Slot.sav","Config/Android/UserSettings.ini","Config/Android/UserCustom.ini"};
+    ArrayList<String> rows=new ArrayList<>();
+    try{
+      root("id");
+      for(int i=0;i<paths.length;i++){
+        String p=base+paths[i];
+        String info=root("if [ -f '"+p+"' ]; then wc -c < '"+p+"'; sha256sum '"+p+"'; else echo MISSING; fi");
+        String[] lines=info.split("\\n");
+        String fingerprint=lines.length>1?lines[0].trim()+" bytes / "+lines[1].trim().split(" ")[0]:"MISSING";
+        String key="settings_fingerprint_"+i;
+        if(compare){
+          String old=prefs.getString(key,"");
+          rows.add(paths[i]+": "+(old.isEmpty()?"لا توجد بصمة سابقة":old.equals(fingerprint)?"لم يتغير":"تغيّر")+"\\n"+fingerprint);
+        }else{
+          prefs.edit().putString(key,fingerprint).commit();
+          rows.add(paths[i]+": "+fingerprint);
+        }
+      }
+      message((compare?"نتيجة المقارنة بعد تغيير الحساسية":"تم حفظ بصمات الملفات قبل تغيير الحساسية")+
+        "\\n"+android.text.TextUtils.join("\\n",rows)+
+        "\\nهذا فحص فقط، ولم يتم تعديل أي ملف. تغيير الملف لا يثبت وحده وجود قيم الجيروسكوب فيه.");
+    }catch(Exception e){message("تعذر فحص بصمات الملفات: "+e.getMessage());}
   }
   private void discoverSensitivityFiles(){
     try{
