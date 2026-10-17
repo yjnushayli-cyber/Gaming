@@ -52,6 +52,12 @@ public class MainActivity extends Activity {
     button("تفعيل جودة متوازنة + 120FPS",()->run(()->applyGraphicsProfile(false)));
     button("تفعيل أولوية ثبات 120FPS",()->run(()->applyGraphicsProfile(true)));
     button("استعادة دقة العرض الأصلية",()->run(()->restoreGraphicsProfile()));
+    title("GFX Tool — فحص وضبط ملف Active.sav");
+    label("طريقة ثانية وجدناها في أدوات GFX: إعدادات FPS ورسومات القتال داخل Active.sav (UE4 GVAS)، وليست UserCustom.ini. تفحص بنية الملف أولًا، وتكتب فقط عند التحقق من الحقول الثلاثة.");
+    button("فحص ملفات GFX وقراءة Active.sav",()->run(()->inspectActiveSav()));
+    button("تجربة HDR + 120FPS داخل Active.sav",()->confirmActiveSavPreset(5));
+    button("تجربة UltraHD + 120FPS داخل Active.sav",()->confirmActiveSavPreset(6));
+    button("إلغاء تعديل Active.sav واستعادة نسخته",()->run(()->restoreActiveSav()));
     title("MAX Graphics — رسومات ثقيلة قريبة من PC (تجريبي)");
     label("أعلى تجربة بصرية داخل الملف: رندر 1.50 + ظلال محسّنة + تفاصيل المباني والأشجار والخامات. هذا ليس 4K ولا رسومات PC الحقيقية، وقد تهبط الفريمات بقوة. أغلق PUBG أولًا.");
     button("تطبيق MAX Graphics (رندر 1.5 + تفاصيل قصوى)",()->confirmMaxGraphics());
@@ -706,6 +712,187 @@ public class MainActivity extends Activity {
         "أغلق اللعبة قبل التعديل ثم اختبر مشهدًا مماثلًا أثناء اللعب. لا يعني حفظ القيم أن PUBG استخدمتها أو أن FPS ارتفع.\n"+
         "للتراجع استخدم زر استعادة ملف رسومات PUBG الأصلي.");
     }catch(Exception e){message("فشل وضع التفاصيل عند «"+stage+"»: "+e.getMessage());}
+  }
+  private String activeSavPath(){
+    return "/sdcard/Android/data/com.tencent.ig/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/SaveGames/Active.sav";
+  }
+  private String activeSavBackup(){
+    return "/sdcard/Download/YRC-PUBG-Active-before-GFX.sav";
+  }
+  private String rootSav(String command)throws Exception{
+    // Ordinary diagnostics truncate at 16 KB; serialized UE4 saves can be larger.
+    String[] suPaths={"su","/system/bin/su","/system/xbin/su","/sbin/su","/su/bin/su"};
+    IOException launchFailure=null;
+    for(String binary:suPaths){
+      if(!"su".equals(binary)&&!new java.io.File(binary).exists())continue;
+      java.lang.Process proc;
+      try{
+        proc=new ProcessBuilder(binary,"-c",command).redirectErrorStream(true).start();
+      }catch(IOException ex){launchFailure=ex;continue;}
+      ByteArrayOutputStream out=new ByteArrayOutputStream();
+      byte[] buf=new byte[4096];int n;boolean overflow=false;
+      try(InputStream in=proc.getInputStream()){
+        while((n=in.read(buf))!=-1){
+          if(out.size()+n>512000){overflow=true;proc.destroy();break;}
+          out.write(buf,0,n);
+        }
+      }
+      int code=proc.waitFor();
+      if(overflow)throw new IOException("ملف الإعدادات كبير جدًا للفحص الآمن");
+      String val=out.toString("UTF-8").trim();
+      if(code!=0)throw new IOException("رمز "+code+": "+val);
+      return val;
+    }
+    throw new IOException("تعذر تشغيل صلاحية الروت من YRC: "+(launchFailure==null?"لا يوجد su":launchFailure.getMessage()));
+  }
+  private byte[] activeSavBytes()throws Exception{
+    String path=activeSavPath();
+    String sizeText=root("if [ -f '"+path+"' ]; then wc -c < '"+path+"'; else echo MISSING; fi").trim();
+    if("MISSING".equals(sizeText))throw new IOException("ملف Active.sav غير موجود في Saved/SaveGames على هذا الإصدار");
+    int size=Integer.parseInt(sizeText);
+    if(size<100||size>320000)throw new IOException("حجم Active.sav غير متوقع: "+size);
+    String encoded=rootSav("base64 '"+path+"'");
+    byte[] data=android.util.Base64.decode(encoded,android.util.Base64.DEFAULT);
+    if(data.length!=size)throw new IOException("القراءة غير مكتملة: "+data.length+" من "+size);
+    if(data[0]!='G'||data[1]!='V'||data[2]!='A'||data[3]!='S')
+      throw new IOException("صيغة Active.sav ليست UE4 GVAS المعروفة؛ لن نجرب تعديلًا مجهولًا");
+    return data;
+  }
+  private int savInt(byte[] data,int offset){
+    if(offset<0||offset>data.length-4)return Integer.MIN_VALUE;
+    return (data[offset]&255)|((data[offset+1]&255)<<8)|
+      ((data[offset+2]&255)<<16)|((data[offset+3]&255)<<24);
+  }
+  private void putSavInt(byte[] data,int offset,int value){
+    for(int i=0;i<4;i++)data[offset+i]=(byte)(value>>>(8*i));
+  }
+  private int activePropertyOffset(byte[] bytes,String name)throws IOException{
+    byte[] key=name.getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+    int found=-1;
+    for(int at=4;at+key.length+31<bytes.length;at++){
+      if(savInt(bytes,at-4)!=key.length+1)continue;
+      boolean match=true;
+      for(int j=0;j<key.length;j++)if(bytes[at+j]!=key[j]){match=false;break;}
+      if(!match||bytes[at+key.length]!=0)continue;
+      int pos=at+key.length+1;
+      byte[] type="IntProperty".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+      if(savInt(bytes,pos)!=type.length+1)continue;
+      pos+=4;
+      for(int j=0;j<type.length;j++)if(bytes[pos+j]!=type[j]){match=false;break;}
+      if(!match||bytes[pos+type.length]!=0)continue;
+      pos+=type.length+1;
+      // UE4 GVAS IntProperty: 4-byte payload size, 4-byte array index,
+      // one-byte 'has property GUID' flag, then the 4-byte value.
+      if(savInt(bytes,pos)!=4||savInt(bytes,pos+4)!=0||bytes[pos+8]!=0)continue;
+      int valueOffset=pos+9;
+      if(valueOffset>bytes.length-4)continue;
+      if(found!=-1)throw new IOException("توجد نسختان من "+name+"؛ أُلغي تعديل Active.sav");
+      found=valueOffset;
+    }
+    return found;
+  }
+  private void inspectActiveSav(){
+    try{
+      root("id");
+      String path=activeSavPath();
+      String has=root("if [ -f '"+path+"' ]; then echo FOUND; else echo MISSING; fi");
+      if(!"FOUND".equals(has)){
+        String rootDir="/sdcard/Android/data/com.tencent.ig/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/SaveGames";
+        String names=root("if [ -d '"+rootDir+"' ]; then ls -1 '"+rootDir+"' | head -25; else echo 'SaveGames directory missing'; fi");
+        message("لم أجد Active.sav بالمسار المعتاد.\nالملفات الموجودة:\n"+names+
+          "\nهذا يعني أن طريقة ملفات GFX المنشورة قد لا تنطبق على إصدارك 4.6.0.");
+        return;
+      }
+      byte[] bytes=activeSavBytes();
+      String[] keys={"ArtQuality","FPSLevel","BattleFPS","BattleRenderQuality",
+        "BattleRenderStyle","LobbyFPS","LobbyRenderQuality"};
+      StringBuilder report=new StringBuilder("فحص Active.sav (قراءة فقط)\nصيغة: GVAS / الحجم: "+bytes.length+" bytes\n");
+      for(String key:keys){
+        int pos=activePropertyOffset(bytes,key);
+        report.append(key).append(" = ").append(pos<0?"غير موجود":savInt(bytes,pos)).append('\n');
+      }
+      String sha=root("sha256sum '"+path+"'").trim().split(" ")[0];
+      report.append("SHA256: ").append(sha).append("\n"+
+        "قيم بعض أدوات GameLoop: FPS=8 لطلب 120، RenderQuality=5 HDR / 6 UltraHD.\n"+
+        "تلك القيم ليست معتمدة رسميًا لـ PUBG Mobile 4.6.0، ولا تضمن تفعيلها على جهازك.");
+      message(report.toString());
+    }catch(Exception e){message("فشل فحص Active.sav: "+e.getMessage());}
+  }
+  private void confirmActiveSavPreset(int graphics){
+    final String quality=graphics==5?"HDR":"UltraHD";
+    new AlertDialog.Builder(this).setTitle("GFX Active.sav — "+quality+" / 120FPS")
+      .setMessage("سيحاول تغيير 3 قيم فقط داخل Active.sav: BattleRenderQuality="+graphics+
+        " وBattleFPS=8 وFPSLevel=8، مع نسخ الملف الأصلي قبل التعديل. هذه القيم مأخوذة من أدوات GameLoop وقد تختلف في نسخة الجوال. تعديل ملف حفظ اللعبة غير رسمي وقد لا يعمل أو يسبب مشاكل/حظرًا. أغلق PUBG أولًا.")
+      .setNegativeButton("إلغاء",null)
+      .setPositiveButton("تجربة",(d,w)->run(()->applyActiveSavPreset(graphics))).show();
+  }
+  private void applyActiveSavPreset(int graphics){
+    String stage="البدء";
+    try{
+      if(graphics!=5&&graphics!=6){message("ملف جودة غير معروف");return;}
+      stage="التحقق من إغلاق PUBG";
+      root("id");
+      if(!root("pidof com.tencent.ig 2>/dev/null || true").trim().isEmpty()){
+        message("أغلق PUBG تمامًا قبل تعديل Active.sav.");return;
+      }
+      String path=activeSavPath(),backup=activeSavBackup();
+      stage="فحص بنية ملف الحفظ";
+      byte[] original=activeSavBytes();
+      byte[] target=java.util.Arrays.copyOf(original,original.length);
+      java.util.LinkedHashMap<String,Integer> desired=new java.util.LinkedHashMap<>();
+      desired.put("BattleRenderQuality",graphics);
+      desired.put("BattleFPS",8);
+      desired.put("FPSLevel",8);
+      int changed=0;
+      for(java.util.Map.Entry<String,Integer> setting:desired.entrySet()){
+        int location=activePropertyOffset(target,setting.getKey());
+        if(location<0){message("الملف لا يحتوي على حقل "+setting.getKey()+" بصيغة موثقة؛ لم أكتب شيئًا.");return;}
+        int old=savInt(target,location);
+        if(old<0||old>12){message("قيمة "+setting.getKey()+" غير متوقعة: "+old+"؛ ألغيت التعديل.");return;}
+        if(old!=setting.getValue()){putSavInt(target,location,setting.getValue());changed++;}
+      }
+      if(changed==0){message("القيم الثلاث موجودة أصلًا في Active.sav؛ لا يعني هذا أن اللعبة تعرض HDR/UltraHD أو 120FPS.");return;}
+      stage="تأكيد نسخة احتياطية";
+      String state=root("if [ ! -e '"+backup+"' ]; then echo MISSING; elif [ -s '"+backup+"' ]; then echo READY; else echo EMPTY; fi");
+      if("EMPTY".equals(state)){message("النسخة الاحتياطية فارغة، لم يحدث تعديل.");return;}
+      if("MISSING".equals(state))root("cp '"+path+"' '"+backup+"'");
+      if(!"READY".equals(root("if [ -s '"+backup+"' ]; then echo READY; else echo FAILED; fi"))){
+        message("لم أستطع حفظ نسخة Active.sav، لم يحدث تعديل.");return;
+      }
+      stage="كتابة ملف GVAS المعدل";
+      String payload=android.util.Base64.encodeToString(target,android.util.Base64.NO_WRAP);
+      String temp="/data/local/tmp/yrc_active_graphics_new.sav";
+      root("printf '%s' '"+payload+"' | base64 -d > '"+temp+"'");
+      String sha=root("sha256sum '"+temp+"'").trim().split(" ")[0];
+      if(!sha.matches("[0-9a-fA-F]{64}"))throw new IOException("تعذر تأكيد بصمة الملف المؤقت");
+      root("cat '"+temp+"' > '"+path+"'");
+      String applied=root("sha256sum '"+path+"'").trim().split(" ")[0];
+      if(!sha.equalsIgnoreCase(applied)){
+        root("cat '"+backup+"' > '"+path+"'");
+        message("فشل تأكيد تعديل Active.sav، تمت محاولة استعادة النسخة الاحتياطية.");return;
+      }
+      root("rm -f '"+temp+"'");
+      message("تم تعديل "+changed+" حقول داخل Active.sav والتحقق من تطابق SHA256.\n"+
+        "الطلب: "+(graphics==5?"HDR":"UltraHD")+" و120FPS.\n"+
+        "هذا إثبات كتابة لا إثبات تشغيل الإعدادات؛ قد تتجاهلها اللعبة أو تعيد ضبطها. نسخة الاستعادة: "+backup);
+    }catch(Exception e){message("تعذر تطبيق Active.sav عند «"+stage+"»: "+e.getMessage());}
+  }
+  private void restoreActiveSav(){
+    try{
+      root("id");
+      if(!root("pidof com.tencent.ig 2>/dev/null || true").trim().isEmpty()){
+        message("أغلق PUBG قبل استعادة Active.sav.");return;
+      }
+      String path=activeSavPath(),backup=activeSavBackup();
+      if(!"YES".equals(root("if [ -s '"+backup+"' ]; then echo YES; else echo NO; fi"))){
+        message("لا توجد نسخة Active.sav محفوظة في YRC.");return;
+      }
+      root("cat '"+backup+"' > '"+path+"'");
+      String a=root("sha256sum '"+backup+"'").trim().split(" ")[0];
+      String b=root("sha256sum '"+path+"'").trim().split(" ")[0];
+      message(a.equalsIgnoreCase(b)?"تم استرجاع Active.sav كما كان قبل تجربة GFX.":
+        "لم نستطع تأكيد الاستعادة؛ لا تفتح اللعبة قبل فحص الملف.");
+    }catch(Exception e){message("تعذرت استعادة Active.sav: "+e.getMessage());}
   }
   private java.util.LinkedHashMap<String,String> maxGraphicsValues(){
     java.util.LinkedHashMap<String,String> d=new java.util.LinkedHashMap<>();
