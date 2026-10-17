@@ -54,6 +54,8 @@ public class MainActivity extends Activity {
     title("تحسين الرسومات داخل ملف PUBG — تجريبي");
     label("يرفع دقة الرندر الداخلية بنسبة 10% فقط إذا كان الإعداد موجودًا. قد يخفض FPS أو تعيد اللعبة ضبطه؛ لا يرفع دقة الشاشة إلى 4K. أغلق PUBG أولًا.");
     button("تطبيق تحسين وضوح 10% داخل UserCustom.ini",()->new AlertDialog.Builder(this).setTitle("تعديل ملف رسومات PUBG").setMessage("سيُنشئ التطبيق نسخة احتياطية ثم يرفع r.MobileContentScaleFactor من 1 إلى 1.1 إن كانت القيمة موجودة. هذا تعديل غير رسمي وقد لا تقبله اللعبة أو قد يعرّض الحساب للقيود. أغلق PUBG قبل المتابعة.").setNegativeButton("إلغاء",null).setPositiveButton("تطبيق", (d,w)->run(()->applyIniClarity())).show());
+    button("وضوح أعلى 15% — تعديل داخل PUBG",()->confirmIniQuality("1.15"));
+    button("وضوح أعلى 25% — تجريبي ثقيل",()->confirmIniQuality("1.25"));
     button("استعادة ملف رسومات PUBG من النسخة الاحتياطية",()->run(()->restoreIniClarity()));
     title("رسومات أوضح + منظور TPP واسع");
     label("ملف موحد يحافظ على دقة الشاشة الأصلية و120Hz، ثم يفتح إرشادات رفع TPP من داخل PUBG. لا يغيّر ملفات اللعبة أو يزعم 4K/240FPS.");
@@ -454,44 +456,60 @@ public class MainActivity extends Activity {
     return out.toString();
   }
   private String iniBackupPath(){return "/sdcard/Download/YRC-PUBG-UserCustom-before-clarity.ini";}
-  private void applyIniClarity(){
+  private void applyIniClarity(){applyIniQuality("1.1");}
+  private void confirmIniQuality(String scale){
+    new AlertDialog.Builder(this).setTitle("رفع جودة رسومات PUBG")
+      .setMessage("سيُعدل r.MobileContentScaleFactor إلى "+scale+" داخل UserCustom.ini مع نسخة احتياطية. هذا لا يرفع الحد الرسمي 120FPS وقد يقلل الفريمات أو ترفضه اللعبة، والتعديل غير الرسمي قد يعرض الحساب للتقييد. أغلق PUBG بالكامل.")
+      .setNegativeButton("إلغاء",null)
+      .setPositiveButton("تطبيق",(d,w)->run(()->applyIniQuality(scale))).show();
+  }
+  private void applyIniQuality(String scale){
     try{
+      if(!java.util.Arrays.asList("1.1","1.15","1.25").contains(scale)){message("مستوى غير مدعوم");return;}
       root("id");
-      if(!root("pidof com.tencent.ig 2>/dev/null").trim().isEmpty()){message("أغلق PUBG بالكامل قبل تعديل ملف الرسومات.");return;}
-      String path=pubgIniPath();
+      if(!root("pidof com.tencent.ig 2>/dev/null").trim().isEmpty()){message("أغلق PUBG بالكامل أولًا.");return;}
+      String path=pubgIniPath(),backup=iniBackupPath();
       String original=root("cat '"+path+"'");
-      if(original.length()<100||original.length()>60000){message("حجم ملف PUBG غير متوقع، تم إلغاء التعديل.");return;}
-      String[] lines=original.split("\\n",-1);
-      boolean inUser=false;int matches=0;
+      if(original.length()<100||original.length()>60000){message("تعذر قراءة الملف بأمان.");return;}
+      String[] lines=original.split("\n",-1);
+      boolean inUser=false;int matches=0;String prior="";
       for(int i=0;i<lines.length;i++){
         String line=lines[i].trim();
         if(line.startsWith("[")&&line.endsWith("]"))inUser=line.equals("[UserCustom DeviceProfile]");
         if(!inUser||!line.startsWith("+CVars="))continue;
         String hex=line.substring(7);
-        if(!hex.matches("[0-9a-fA-F]+")||hex.length()%2!=0)continue;
+        if(hex.length()%2!=0||!hex.matches("[0-9a-fA-F]+"))continue;
         String decoded=iniDecode(hex);
         if(!decoded.startsWith("r.MobileContentScaleFactor="))continue;
+        prior=decoded.substring("r.MobileContentScaleFactor=".length());
         matches++;
-        String old=decoded.substring("r.MobileContentScaleFactor=".length());
-        if(old.equals("1.1")){message("تحسين وضوح 10% موجود بالفعل في الملف.");return;}
-        if(!old.equals("1")&&!old.equals("1.0")){message("قيمة دقة الرندر الحالية "+old+" غير متوقعة؛ لن أغيّرها.");return;}
-        lines[i]="+CVars="+iniEncode("r.MobileContentScaleFactor=1.1");
+        if(!java.util.Arrays.asList("1","1.0","1.1","1.15","1.25").contains(prior)){
+          message("قيمة رندر غير متوقعة: "+prior+"؛ لن أعدل الملف.");return;
+        }
+        lines[i]="+CVars="+iniEncode("r.MobileContentScaleFactor="+scale);
       }
-      if(matches!=1){message("لم يتم العثور على قيمة واحدة مؤكدة لدقة الرندر. التعديل أُلغي، عدد النتائج: "+matches);return;}
+      if(matches!=1){message("لم أجد قيمة رندر واحدة مؤكدة. العدد: "+matches);return;}
+      if(prior.equals(scale)){message("المستوى "+scale+" موجود بالفعل.");return;}
       String edited=android.text.TextUtils.join("\n",java.util.Arrays.asList(lines));
-      if(!original.endsWith("\n")&&edited.endsWith("\n")){message("اختلاف في تنسيق الملف، أُلغي التعديل.");return;}
       String encoded=android.util.Base64.encodeToString(edited.getBytes(java.nio.charset.StandardCharsets.UTF_8),android.util.Base64.NO_WRAP);
-      String backup=iniBackupPath();
-      String cmd="set -e; test -f '"+path+"'; test ! -e '"+backup+"' && cp -p '"+path+"' '"+backup+"'; "+
-        "printf '%s' '"+encoded+"' | base64 -d > /data/local/tmp/yrc_pubg_clarity.ini; "+
-        "test $(wc -c < /data/local/tmp/yrc_pubg_clarity.ini) -gt 100; "+
-        "cat /data/local/tmp/yrc_pubg_clarity.ini > '"+path+"'; rm -f /data/local/tmp/yrc_pubg_clarity.ini; "+
-        "sha256sum '"+path+"' '"+backup+"'";
-      String result=root(cmd);
-      String check=root("cat '"+path+"'");
-      if(!check.equals(edited)){message("تعذر تأكيد الكتابة! استخدم زر الاستعادة.\\n"+result);return;}
-      message("تم تعديل r.MobileContentScaleFactor إلى 1.1 داخل UserCustom.ini.\\nنسخة احتياطية: "+backup+"\\nافتح PUBG وقارن الوضوح وFPS. قد تعيد اللعبة ضبط الإعداد تلقائيًا.");
-    }catch(Exception e){message("فشل تعديل رسومات PUBG: "+e.getMessage());}
+      String temp="/data/local/tmp/yrc_pubg_render_temp.ini";
+      // First backup stays immutable across repeated preset changes.
+      if(!root("test -f '"+backup+"' && echo EXISTS").contains("EXISTS")){
+        root("cp -p '"+path+"' '"+backup+"'");
+      }
+      if(!root("test -s '"+backup+"' && echo OK").contains("OK")){message("تعذر حفظ النسخة الاحتياطية، لم نكتب إلى اللعبة.");return;}
+      root("printf '%s' '"+encoded+"' | base64 -d > '"+temp+"'");
+      String tempHash=root("sha256sum '"+temp+"'").trim();
+      if(!tempHash.matches("(?s)^[0-9a-f]{64}.*")){message("فشل تجهيز ملف الجودة، لم نكتب إلى اللعبة.");return;}
+      root("cat '"+temp+"' > '"+path+"'");
+      String actual=root("sha256sum '"+path+"'").trim();
+      if(!actual.substring(0,64).equals(tempHash.substring(0,64))){
+        root("cat '"+backup+"' > '"+path+"'");
+        message("فشل التحقق من التعديل؛ تمت محاولة استعادة الملف الأصلي.");return;
+      }
+      root("rm -f '"+temp+"'");
+      message("تمت كتابة قيمة الرندر "+scale+" والتحقق من الملف. نسخة الاستعادة: "+backup+"\nالحد الرسمي 120FPS لم يتغير. جرّب FPS وجودة الصورة؛ قد تتجاهل اللعبة القيمة.");
+    }catch(Exception e){message("تعذر تعديل رسومات PUBG: "+e.getMessage());}
   }
   private void restoreIniClarity(){
     try{
