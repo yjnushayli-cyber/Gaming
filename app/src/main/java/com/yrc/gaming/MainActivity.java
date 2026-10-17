@@ -55,6 +55,11 @@ public class MainActivity extends Activity {
     title("MAX Graphics — رسومات ثقيلة قريبة من PC (تجريبي)");
     label("أعلى تجربة بصرية داخل الملف: رندر 1.50 + ظلال محسّنة + تفاصيل المباني والأشجار والخامات. هذا ليس 4K ولا رسومات PC الحقيقية، وقد تهبط الفريمات بقوة. أغلق PUBG أولًا.");
     button("تطبيق MAX Graphics من داخل UserCustom.ini",()->confirmMaxGraphics());
+    button("إلغاء MAX وإرجاع الملف لما قبل التجربة",()->new AlertDialog.Builder(this)
+      .setTitle("إلغاء MAX Graphics")
+      .setMessage("سيعيد ملف الرسومات الذي احتفظنا به قبل تجربة MAX. أغلق PUBG تمامًا قبل الاستعادة.")
+      .setNegativeButton("إلغاء",null)
+      .setPositiveButton("استرجاع",(d,w)->run(()->restoreBeforeMax())).show());
     button("فحص ثبات قيم MAX بعد اللعب",()->run(()->verifyIniQualityAfterGame()));
     title("تعديل الرندر والتفاصيل بضغطة واحدة — PUBG");
     label("ملف موحد: رندر 1.15 + 6 إعدادات تفاصيل وخامات من إعدادات اللعبة الاحتياطية. يُكتب إلى UserCustom فقط، وليس إلى Android. لا يضمن استمرار القيم بعد تشغيل اللعبة.");
@@ -847,6 +852,28 @@ public class MainActivity extends Activity {
       message("نجحت كتابة "+changed+" إعدادات من أصل "+desired.size()+" ضمن MAX والتحقق من بصمة الملف. نسخة الأمان: "+safety+
         "\nهذا نجاح في الكتابة فقط، وليس إثباتًا أن PUBG فعّلت التأثيرات. افحص FPS ودرجة الحرارة والوضوح، ثم شغّل فحص القيم بعد اللعب.");
     }catch(Exception e){message("فشل MAX عند «"+stage+"»: "+e.getMessage());}
+  }
+  private void restoreBeforeMax(){
+    try{
+      root("id");
+      if(!root("pidof com.tencent.ig 2>/dev/null || true").trim().isEmpty()){
+        message("أغلق PUBG بالكامل قبل إلغاء MAX.");return;
+      }
+      String backup="/sdcard/Download/YRC-PUBG-before-MAX.ini";
+      String path=pubgIniPath();
+      if(!"READY".equals(root("if [ -s '"+backup+"' ]; then echo READY; else echo MISSING; fi"))){
+        message("لا توجد نسخة محفوظة قبل MAX، لم يحدث تغيير.");return;
+      }
+      root("cat '"+backup+"' > '"+path+"'");
+      String expected=root("sha256sum '"+backup+"'").trim().split(" ")[0];
+      String actual=root("sha256sum '"+path+"'").trim().split(" ")[0];
+      if(!expected.equalsIgnoreCase(actual)){
+        message("لم أستطع تأكيد استعادة الملف، توقف عن التعديل حتى تفحصه.");return;
+      }
+      prefs.edit().remove("last_graphics_preset").remove("last_graphics_profile_sha")
+        .remove("last_graphics_profile_scale").apply();
+      message("تمت استعادة UserCustom.ini إلى حالته قبل تجربة MAX والتحقق من تطابق الملف.");
+    }catch(Exception e){message("تعذرت استعادة ملف ما قبل MAX: "+e.getMessage());}
   }
   private void confirmCombinedIniGraphics(){
     new AlertDialog.Builder(this).setTitle("تعديل الرسومات داخل PUBG")
