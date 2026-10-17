@@ -150,8 +150,21 @@ final class SessionManager {
             return new StartResult(false,"هناك جلسة سابقة لم تُستعد إعداداتها بعد. اضغط الاستعادة أولًا.");
         try{
             if(!"0".equals(root("id -u")))throw new IOException("KernelSU root denied");
-            if(thermal(ctx)>=PowerManager.THERMAL_STATUS_SEVERE)
-                return new StartResult(false,"الحماية الحرارية مرتفعة؛ أوقف اللعب ودع الجهاز يبرد.");
+            // Previous YRC versions raised minimum CPU/GPU frequencies. Undo them
+            // before starting a session: high DVFS floors can worsen sustained heat.
+            try{
+                notes.addAll(new KernelBoost(p).restore());
+            }catch(Exception e){notes.add("استعادة الترددات السابقة: "+shortError(e));}
+            int battery=batteryTenths(ctx);
+            int thermalState=thermal(ctx);
+            if(thermalState>=PowerManager.THERMAL_STATUS_MODERATE||
+               (battery>=400)){
+                notes.add("الجهاز دافئ/حماية الحرارة نشطة ("+
+                    (battery<0?"غير معروف":(battery/10.0)+"°C")+
+                    "). لن يبدأ أي وضع أداء قبل أن يبرد.");
+                notes.add("تمت محاولة إلغاء Boost القديم إن كان محفوظًا.");
+                return new StartResult(false,android.text.TextUtils.join("\n",notes));
+            }
             // Mark active BEFORE touching any settings; fail and recover safely.
             if(!p.edit().putBoolean(ACTIVE,true)
                 .putInt("session5_percent",percent).commit())
@@ -166,13 +179,9 @@ final class SessionManager {
                     " | peak "+root("settings get system peak_refresh_rate")+"Hz");
             }catch(Exception e){notes.add("إعدادات الشاشة: "+shortError(e));}
 
-            try{
-                // Avoid aggressive 35% clock floors that can cause thermal drops.
-                if(batteryTenths(ctx)>=400){
-                    notes.add("البطارية دافئة (40°C أو أكثر): لم نرفع ترددات CPU/GPU.");
-                    notes.addAll(new KernelBoost(p).restore());
-                }else notes.addAll(new KernelBoost(p).applyStability());
-            }catch(Exception e){notes.add("ترددات CPU/GPU: "+shortError(e));}
+            // Explicitly do NOT raise CPU/GPU minimum clocks, at any battery
+            // temperature. Android's own DVFS governor needs headroom to cool.
+            notes.add("CPU/GPU: ألغينا رفع الحد الأدنى للترددات؛ التحكم يعود لنظام XOS لتقليل السخونة.");
 
             try{resizeForGaming(p,percent,notes);}
             catch(Exception e){notes.add("تحسين دقة العرض: "+shortError(e));}
@@ -204,7 +213,7 @@ final class SessionManager {
                 }else notes.add("عدم الإزعاج: لم تتوفر موافقة النظام، لم نغيّر الإشعارات.");
             }
 
-            notes.add("لا تعديل لملفات PUBG ولا تجاوز للحماية الحرارية.");
+            notes.add("لا رفع إجباري لترددات CPU/GPU ولا تعديل لملفات PUBG أو تعطيل للحرارة.");
             notes.add("الاستعادة التلقائية تعتمد على استمرار خدمة جلسة اللعب؛ الاستعادة اليدوية متاحة دائمًا.");
             String report=android.text.TextUtils.join("\n",notes);
             p.edit().putString(SESSION_REPORT,report).commit();
