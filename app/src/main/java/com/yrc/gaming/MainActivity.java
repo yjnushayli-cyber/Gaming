@@ -1,816 +1,323 @@
 package com.yrc.gaming;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.NotificationManager;
-import android.content.pm.PackageManager;
-import android.os.Bundle;
-import android.os.PowerManager;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
-import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.net.ConnectivityManager;
-import android.net.Network;
-import android.net.NetworkCapabilities;
+import android.os.Build;
+import android.os.Bundle;
 import android.provider.Settings;
 import android.view.View;
 import android.view.WindowInsets;
-import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.Socket;
-import java.util.ArrayList;
+
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class MainActivity extends Activity {
-    private static final int BG=Color.rgb(12,18,29);
-    private static final int TEAL=Color.rgb(72,216,182);
-    private static final int PANEL=Color.rgb(24,39,54);
+/**
+ * YRC Gaming Pro 6.0: rebuilt one-screen controller over a single SessionEngine.
+ * No magic anti-ban, no memory patches, no PUBG configuration file access.
+ */
+public final class MainActivity extends Activity {
     private static final String PUBG="com.tencent.ig";
-    private final ExecutorService worker=Executors.newSingleThreadExecutor();
-    private SharedPreferences prefs;
-    private LinearLayout main;
+    private static final int NOTIFICATIONS=617;
+    private static final int BG=Color.rgb(10,16,26);
+    private static final int SURFACE=Color.rgb(22,32,48);
+    private static final int TEAL=Color.rgb(60,225,185);
+    private static final int TEXT=Color.rgb(238,245,251);
+    private static final int MUTED=Color.rgb(171,187,203);
+    // Survives short activity recreation caused by Android wm size override.
+    private static final ExecutorService WORK=Executors.newSingleThreadExecutor();
+    private LinearLayout body;
     private TextView status;
-    private String lastReport="جاهز • تحسينات نظام Android فقط، دون تعديل ملفات PUBG.";
-    private int pendingSessionPercent=85;
-    private static final int NOTIFICATION_REQUEST=501;
+    private int requestedPercent=100;
+    private String lastReport="YRC جاهز — لم يتم تعديل أي إعداد في هذه الجلسة.";
 
-    @Override public void onCreate(Bundle state) {
+    @Override public void onCreate(Bundle state){
         super.onCreate(state);
-        prefs=getSharedPreferences("yrc_clean_30",MODE_PRIVATE);
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
-
         LinearLayout frame=new LinearLayout(this);
         frame.setOrientation(LinearLayout.VERTICAL);
         frame.setBackgroundColor(BG);
-        // Android 15/16 enforce edge-to-edge with targetSdk 35. Honor safe areas.
-        frame.setOnApplyWindowInsetsListener((view,insets)->{
-            android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());
-            frame.setPadding(0,bars.top,0,bars.bottom);
+        frame.setOnApplyWindowInsetsListener((v,insets)->{
+            android.graphics.Insets i=insets.getInsets(WindowInsets.Type.systemBars());
+            v.setPadding(0,i.top,0,i.bottom);
             return insets;
         });
         setContentView(frame);
         frame.requestApplyInsets();
 
-        status=new TextView(this);
-        status.setText("جاهز • اضغط هنا لعرض التقرير الكامل");
-        status.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG);
-        status.setTextColor(Color.WHITE);
-        status.setTextSize(14);
-        status.setMaxLines(2);
+        LinearLayout header=new LinearLayout(this);
+        header.setPadding(dp(22),dp(22),dp(20),dp(12));
+        header.setOrientation(LinearLayout.VERTICAL);
+        TextView brand=text("YRC  /  GAMING PRO",22,TEXT,true);
+        header.addView(brand);
+        TextView subtitle=text("ENGINE 6.0    •    GT30 PRO    •    ANDROID 16",12,TEAL,false);
+        subtitle.setPadding(0,dp(2),0,0);
+        header.addView(subtitle);
+        frame.addView(header);
+
+        status=text(lastReport,13,TEXT,false);
+        status.setPadding(dp(16),dp(16),dp(16),dp(16));
+        status.setMaxLines(3);
         status.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        status.setPadding(dp(15),dp(13),dp(15),dp(13));
-        GradientDrawable panel=new GradientDrawable();
-        panel.setColor(PANEL);
-        panel.setCornerRadius(dp(13));
-        panel.setStroke(dp(1),TEAL);
-        status.setBackground(panel);
-        LinearLayout.LayoutParams statParams=new LinearLayout.LayoutParams(-1,-2);
-        statParams.setMargins(dp(14),dp(14),dp(14),dp(7));
-        frame.addView(status,statParams);
+        status.setBackground(panel(SURFACE,TEAL));
+        LinearLayout.LayoutParams statusParams=new LinearLayout.LayoutParams(-1,-2);
+        statusParams.setMargins(dp(16),dp(5),dp(16),dp(10));
+        frame.addView(status,statusParams);
         status.setOnClickListener(v->new AlertDialog.Builder(this)
-            .setTitle("التقرير الكامل لآخر عملية").setMessage(lastReport)
-            .setPositiveButton("إغلاق",null).show());
+            .setTitle("التقرير الكامل")
+            .setMessage(lastReport)
+            .setPositiveButton("إغلاق",null)
+            .show());
 
-        ScrollView scroll=new ScrollView(this);
-        scroll.setFillViewport(true);
-        main=new LinearLayout(this);
-        main.setOrientation(LinearLayout.VERTICAL);
-        main.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        main.setPadding(dp(19),dp(10),dp(19),dp(34));
-        scroll.addView(main);
-        frame.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        ScrollView scroller=new ScrollView(this);
+        scroller.setFillViewport(true);
+        body=new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        body.setPadding(dp(18),dp(6),dp(18),dp(45));
+        scroller.addView(body);
+        frame.addView(scroller,new LinearLayout.LayoutParams(-1,0,1));
 
-        heading("YRC GAMING PRO 5.1 • COOL FPS");
-        info("بعد تجربة 100–105FPS مع سخونة الجهاز، أوقفنا تمامًا رفع الحد الأدنى لترددات CPU/GPU. هذه النسخة تترك XOS يتحكم بالترددات والحرارة.");
-        action("▶ لعب أبرد — دقة 85% + 120Hz",()->requestCompetitiveSession(85));
-        action("▶ لعب متوازن — دقة 90% + 120Hz",()->requestCompetitiveSession(90));
-        action("⟲ إيقاف كل التحسينات واستعادة الأصل",this::restoreSessionNow);
-        info("يمنع YRC بدء الجلسة إذا كانت البطارية ساخنة أو ارتفع مستوى الحماية الحرارية. بعد إغلاق PUBG يحاول استعادة الإعدادات تلقائيًا؛ زر الاستعادة اليدوي دائمًا متاح.");
-        action("XArena — eSports / Bypass Charging",this::openXArena);
-        action("عدم الإزعاج خلال الجلسة (اختياري)",this::toggleDndSession);
-        info("ابدأ بوضع 85% بعد أن يبرد الجهاز. هذا يقلل حمل البكسلات المعروضة لكنه لا يضمن 120FPS ثابتًا داخل محرك PUBG.");
+        section("محرك الجلسة الموحد");
+        paragraph("هذه نسخة أعيدت كتابة واجهتها ومحركها. لا نرفع ترددات CPU/GPU ولا نعدل ملفات اللعبة. الاختبار الأساسي: طلب 120Hz كحد أدنى وأقصى للشاشة، مع التحقق من قبول النظام.");
 
-        heading("بدون رفع ترددات");
-        info("ألغينا الأزرار التي تكرر رفع ترددات CPU/GPU. لمنع زيادة السخونة نستخدم تخفيف العرض والخيارات الرسمية للعبة فقط.");
+        primaryButton("▶ START — شاشة 120Hz بدون تغيير الأبعاد",()->confirmStart(100));
+        primaryButton("▶ STABILITY — شاشة 120Hz + عرض 90%",()->confirmStart(90));
+        secondaryButton("■ إنهاء الجلسة واستعادة كل تعديل",this::requestRestore);
+        paragraph("الوضع الأول يفصل مشكلة Hz عن أداء PUBG. الوضع الثاني يقلل أبعاد Android اختياريًا مع الحفاظ على نسبة 16:10 الحالية. لا يمكن لأي منهما ضمان أن محرك PUBG يُنتج 120FPS.");
 
-        heading("01  ثبات الفريمات");
-        info("الهبوط إلى 100FPS مع حرارة مرتفعة يدل أن رفع الترددات السابقة لم يساعدك. ابدأ بجهاز بارد، PUBG Smooth + أعلى FPS رسمي متاح، ولا ترفع ترددات CPU/GPU يدويًا.");
-        action("طلب شاشة 120Hz فقط — بدون Boost",()->background(this::applyFpsProfile));
+        section("منظور الشاشة");
+        secondaryButton("تفعيل منظور PC 16:10",()->confirmPc(true));
+        secondaryButton("إلغاء منظور PC واستعادة المقاس السابق",()->confirmPc(false));
+        paragraph("تغيير الأبعاد قد يغيّر مواضع اللمس أو يضيف أشرطة. استخدم الاستعادة قبل حذف التطبيق.");
 
-        heading("02  تحسين الرسومات");
-        info("جودة الشاشة من Android فقط. جودة الخامات وHDR والفريمات الحقيقية تختارها من قائمة PUBG الرسمية.");
-        action("وضوح أصلي 100% — أعلى دقة للشاشة",()->background(()->applyResolution(100)));
-        action("متوازن 95% — لتخفيف حمل العرض",()->background(()->applyResolution(95)));
-        action("إعدادات الرسومات الرسمية الموصى بها",this::showGraphicsGuide);
+        section("فحص موثوق، بدون أرقام وهمية");
+        secondaryButton("فحص أوضاع الشاشة والقيم الفعلية",()->execute(()->SessionEngine.diagnostic(getApplicationContext())));
+        secondaryButton("فتح إعدادات XArena / وضع اللعب",this::openGamingSettings);
+        paragraph("الفحص يوضح ما قبلته إعدادات Android. لا يدّعي قراءة FPS اللعبة أو حرارتها الداخلية.");
 
-        heading("03  ثبات البنق وتقليل الدمج الوهمي");
-        info("زر فعلي للشبكة: يفعّل Wi-Fi Low Latency، ويحاول تعطيل توفير طاقة شريحة Wi-Fi إذا دعمه تعريف الجهاز. قد يقلل التأخير والتذبذب، لكنه لا يغير احتساب إصابات PUBG في السيرفر.");
-        action("تقليل الدمج الوهمي — تحسين الاتصال",this::confirmHitAssist);
-        action("إلغاء تحسين الدمج الوهمي واستعادة Wi-Fi",()->background(this::restoreHitAssist));
-        action("فتح إعدادات Wi-Fi والشبكة",()->{
-            try{startActivity(new Intent(Settings.ACTION_WIFI_SETTINGS));}
-            catch(Exception e){message("تعذّر فتح إعدادات الشبكة: "+e.getMessage());}
-        });
-
-        heading("04  منظور PC");
-        info("عرض PC 16:9 أو 16:10 لتجربة إطار أكثر إحكامًا. قد يتغير حجم اللاعب على الشاشة، لكن لا يوجد ضمان لإظهار جسمه كاملًا؛ ضبط بُعد كاميرا TPP الحقيقي من خيارات PUBG الرسمية فقط.");
-        action("منظور PC كلاسيكي 16:9",()->confirmPcRatio());
-        action("منظور PC 16:10 — مساحة أصغر للتجربة",()->confirmPcCompact());
-        action("ضبط TPP الواسع من PUBG رسميًا",this::showTppGuide);
-
-        heading("التحكم والاستعادة");
-        action("إرجاع جميع الإعدادات المحفوظة",this::restoreSessionNow);
-        action("إرجاع أبعاد الشاشة المصنعية فقط",this::confirmFactoryScreenRestore);
-        action("فتح PUBG Mobile بدون تجهيز جلسة",this::launchGame);
-        info("لا يوجد برنامج يستطيع ضمان 120FPS ثابتًا عند ارتفاع الحرارة أو تقييد PUBG/XOS للأداء. لا تعديل لملفات اللعبة ولا تجاوز لقيود الحرارة.");
-        if(SessionManager.active(this)){
+        section("الصيانة والاستعادة");
+        secondaryButton("استعادة آثار إصدارات YRC السابقة",this::confirmLegacyRestore);
+        secondaryButton("فتح PUBG بدون أي تغييرات",this::launchPubg);
+        paragraph("إذا بقيت اللعبة تهبط من 120 إلى 60 بينما الشاشة 120Hz، فالأسباب المحتملة داخل اللعبة/الرسوميات/إدارة النظام؛ لن نخترع زرًا يقول إنه أصلحها.");
+        lastReport=SessionEngine.lastReport(this);
+        updateStatus(lastReport);
+        if(SessionEngine.active(this)){
             new AlertDialog.Builder(this)
-                .setTitle("جلسة لعب غير مستعادة")
-                .setMessage("YRC ما زال لديه سجل جلسة نشطة أو استعادة غير مكتملة. إذا انتهيت من PUBG، اضغط استعادة الإعدادات. إذا كنت داخل جلسة حاليًا، اتركها.")
-                .setNegativeButton("اترك الجلسة",null)
-                .setPositiveButton("استعادة الآن",(d,w)->restoreSessionNow())
+                .setTitle("جلسة سابقة لم تُستعد")
+                .setMessage("هناك إعدادات محفوظة من جلسة YRC 6.0. يمكنك استعادتها الآن، أو تركها إن كنت ما زلت تلعب.")
+                .setNegativeButton("لاحقًا",null)
+                .setPositiveButton("استعادة", (d,w)->requestRestore())
                 .show();
         }
     }
 
-    private void requestCompetitiveSession(int percent){
-        pendingSessionPercent=percent;
-        if(!gameInstalled()){
-            message("PUBG Mobile Global غير مثبتة؛ لم نغيّر إعدادات الجهاز.");
+    @Override protected void onResume(){
+        super.onResume();
+        if(status!=null){
+            String report=SessionEngine.lastReport(this);
+            if(!report.equals(lastReport))updateStatus(report);
+        }
+    }
+
+    private void confirmStart(int percent){
+        requestedPercent=percent;
+        if(!hasPubg()){
+            updateStatus("PUBG Mobile Global غير مثبتة أو غير متاحة لهذا التطبيق. لم نغير أي إعداد.");
             return;
         }
-        if(SessionManager.active(this)){
+        if(SessionEngine.active(this)){
             new AlertDialog.Builder(this)
-                .setTitle("هناك جلسة نشطة")
-                .setMessage("لا يمكن تفعيل جلسة ثانية قبل استعادة الأولى. إذا انتهيت من اللعب، اضغط استعادة الإعدادات.")
+                .setTitle("جلسة نشطة")
+                .setMessage("لا تبدأ جلسة أخرى قبل إيقاف الحالية واستعادة الإعدادات.")
                 .setNegativeButton("إغلاق",null)
-                .setPositiveButton("استعادة الآن",(d,w)->restoreSessionNow())
+                .setPositiveButton("استعادة",(d,w)->requestRestore())
                 .show();
             return;
         }
-        if(!prefs.getBoolean("session5_consent",false)){
-            new AlertDialog.Builder(this)
-                .setTitle("YRC Competitive Session")
-                .setMessage("سيستعيد YRC أي رفع قديم لحدود ترددات CPU/GPU، ثم يطلب 120Hz ويخفّض دقة عرض Android مع إعداد Wi-Fi عند دعمه، ويفتح PUBG. يمنع بدء الجلسة إذا كان الجهاز ساخنًا. هذه ليست طريقة لإجبار اللعبة على 120FPS.\n\nستظهر خدمة تحاول الاستعادة عند إغلاق اللعبة، لكن لا نعتمد عليها وحدها؛ زر الاستعادة متاح دومًا. لا تعديل لملفات PUBG.")
-                .setNegativeButton("إلغاء",null)
-                .setPositiveButton("أفهم، ابدأ",(d,w)->{
-                    prefs.edit().putBoolean("session5_consent",true).commit();
-                    checkSessionNotificationPermission();
-                }).show();
-        }else checkSessionNotificationPermission();
+        String details=percent==100?
+            "سنطلب من Android تردد شاشة 120Hz (حد أدنى وحد أقصى)، ونحافظ على دقة ومنظور جهازك الحاليين.":
+            "سنطلب 120Hz ونخفض أبعاد Android الحالية إلى 90%، مع المحافظة على نسبة 16:10 إذا كانت مفعلة.";
+        new AlertDialog.Builder(this)
+            .setTitle("بدء جلسة YRC "+(percent==100?"120Hz":"STABILITY 90%"))
+            .setMessage(details+"\n\nيحتاج KernelSU Next وظهور إشعار الجلسة. نتحقق من القيم ونحفظ الإعدادات السابقة قبل كل تعديل. لا نغيّر إعدادات PUBG الداخلية ولا نعطّل حماية الحرارة.")
+            .setNegativeButton("إلغاء",null)
+            .setPositiveButton("ابدأ",(d,w)->checkNotificationPermission())
+            .show();
     }
 
-    private void checkSessionNotificationPermission(){
-        if(android.os.Build.VERSION.SDK_INT>=33&&
-            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
-                !=PackageManager.PERMISSION_GRANTED){
-            requestPermissions(new String[]{
-                android.Manifest.permission.POST_NOTIFICATIONS
-            },NOTIFICATION_REQUEST);
-        }else startCompetitiveSession(pendingSessionPercent);
+    private boolean hasPubg(){
+        try{return getPackageManager().getLaunchIntentForPackage(PUBG)!=null;}
+        catch(Exception e){return false;}
     }
-    @Override public void onRequestPermissionsResult(int requestCode,String[] names,
-                                                       int[] results){
-        super.onRequestPermissionsResult(requestCode,names,results);
-        if(requestCode!=NOTIFICATION_REQUEST)return;
-        if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED){
-            startCompetitiveSession(pendingSessionPercent);
-        }else{
-            new AlertDialog.Builder(this)
-                .setTitle("إشعارات خدمة الاستعادة")
-                .setMessage("لم تمنح التطبيق صلاحية عرض الإشعارات. يمكن بدء الجلسة، لكن قد لا يظهر إشعار الاستعادة. سيبقى زر الاستعادة اليدوي داخل YRC.")
-                .setNegativeButton("إلغاء",null)
-                .setPositiveButton("استمرار",(d,w)->startCompetitiveSession(pendingSessionPercent))
-                .show();
+
+    private void checkNotificationPermission(){
+        if(Build.VERSION.SDK_INT>=33&&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED){
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},NOTIFICATIONS);
+            return;
         }
+        beginSession(requestedPercent);
+    }
+    @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] results){
+        super.onRequestPermissionsResult(requestCode,permissions,results);
+        if(requestCode!=NOTIFICATIONS)return;
+        if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)
+            beginSession(requestedPercent);
+        else updateStatus("لم تسمح بإشعار الجلسة. لم نغيّر الإعدادات لأن خدمة الاستعادة لن تكون ظاهرة لك.");
     }
 
-    private void startCompetitiveSession(int percent){
-        message("جاري تجهيز جلسة اللعب وتسجيل النسخ الأصلية لإعدادات الجهاز...");
-        background(()->{
-            SessionManager.StartResult result=SessionManager.begin(
-                getApplicationContext(),percent);
-            if(!result.started){
-                message(result.report);
-                return;
-            }
+    private void beginSession(int percent){
+        updateStatus("جارٍ تطبيق الجلسة مع حفظ النسخة الأصلية والتحقق من قبول القيم…");
+        Context app=getApplicationContext();
+        WORK.execute(()->{
+            SessionEngine.Result result=SessionEngine.start(app,percent);
             runOnUiThread(()->{
+                updateStatus(result.report);
+                if(!result.started)return;
                 try{
-                    Intent service=new Intent(this,SessionService.class)
+                    Intent intent=new Intent(this,SessionService.class)
                         .setAction(SessionService.ACTION_START);
-                    startForegroundService(service);
-                    message(result.report+"\nسيحاول YRC إعادة إعداداتك عند انتهاء PUBG.");
-                    launchGame();
+                    if(Build.VERSION.SDK_INT>=26)startForegroundService(intent);
+                    else startService(intent);
+                    launchPubg();
                 }catch(Exception e){
-                    background(()->{
-                        List<String> restored=SessionManager.restore(getApplicationContext());
-                        message("تعذر تفعيل خدمة الاستعادة؛ لم نبدأ اللعبة.\n"+
-                            e.getMessage()+"\n"+android.text.TextUtils.join("\n",restored));
-                    });
+                    updateStatus(result.report+"\nتعذّر بدء خدمة الاستعادة: "+e.getMessage()+
+                        "\nسيتم الآن استعادة إعدادات الجلسة.");
+                    requestRestore();
                 }
             });
         });
     }
 
-    private void restoreSessionNow(){
-        // Stop the watcher first so it cannot race with a manual restoration.
-        stopService(new Intent(this,SessionService.class));
-        message("يتم الآن استعادة أبعاد الشاشة وأداء CPU/GPU والشبكة...");
-        background(()->{
-            List<String> result=SessionManager.restore(getApplicationContext());
-            message(android.text.TextUtils.join("\n",result));
-        });
+    private void requestRestore(){
+        execute(()->android.text.TextUtils.join("\n",
+            SessionEngine.restore(getApplicationContext())));
+        try{
+            stopService(new Intent(this,SessionService.class));
+        }catch(Exception ignored){}
     }
 
-    private void openXArena(){
-        Intent x=getPackageManager().getLaunchIntentForPackage(
-            "com.transsion.gamespace.app");
-        String guide="من XArena فعّل eSports / XBOOST حسب الخيارات المتاحة، "+
-            "واضبط GT shoulder triggers من الإعدادات الرسمية. "+
-            "إذا كنت تلعب بالشاحن، راجع خيار Bypass Charging الرسمي لتخفيف حرارة البطارية. "+
-            "YRC لا يغيّر هذه الخيارات عبر أوامر غير موثوقة.";
-        if(x==null){
-            new AlertDialog.Builder(this).setTitle("فتح XArena")
-                .setMessage("لم أجد تطبيق XArena بالاسم المعروف على إصدار XOS لديك.\n\n"+guide)
-                .setPositiveButton("إغلاق",null).show();
-        }else{
-            new AlertDialog.Builder(this).setTitle("XArena — أدوات اللعب الرسمية")
-                .setMessage(guide)
-                .setNegativeButton("إلغاء",null)
-                .setPositiveButton("فتح XArena",(d,w)->{
-                    try{startActivity(x);}catch(Exception e){
-                        message("تعذر فتح XArena: "+e.getMessage());
-                    }
-                }).show();
-        }
-    }
-
-    private void toggleDndSession(){
-        boolean desired=!prefs.getBoolean(SessionManager.DND_WANTED,false);
-        prefs.edit().putBoolean(SessionManager.DND_WANTED,desired).commit();
-        if(!desired){
-            message("عدم الإزعاج خلال الجلسات القادمة: معطّل. لن نغيّر الإشعارات.");
+    private void confirmPc(boolean enable){
+        if(SessionEngine.active(this)){
+            updateStatus("أوقف جلسة YRC أولًا قبل تعديل أبعاد الشاشة.");
             return;
         }
-        NotificationManager nm=(NotificationManager)
-            getSystemService(NOTIFICATION_SERVICE);
-        if(nm!=null&&nm.isNotificationPolicyAccessGranted()){
-            message("عدم الإزعاج: مفعّل للجلسات القادمة فقط. سيتم حفظ الحالة الأصلية واستعادتها.");
-        }else{
-            new AlertDialog.Builder(this)
-                .setTitle("صلاحية عدم الإزعاج")
-                .setMessage("لإدارة الإشعارات أثناء اللعب، تحتاج YRC إلى سماحك الرسمي من إعدادات Android. بدون الموافقة لن يغيّر الإشعارات.")
-                .setNegativeButton("ليس الآن",null)
-                .setPositiveButton("فتح إعدادات الصلاحية",(d,w)->{
-                    try{
-                        startActivity(new Intent(
-                            Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS));
-                    }catch(Exception e){message("تعذر فتح إعدادات عدم الإزعاج.");}
-                }).show();
+        new AlertDialog.Builder(this)
+            .setTitle(enable?"منظور PC 16:10":"استعادة أبعاد الشاشة")
+            .setMessage(enable?
+                "سيغيّر Android نسبة عرض الشاشة إلى 16:10. هذا ليس توسيع FOV داخل PUBG. يتم حفظ مقاس الشاشة السابق للاستعادة.":
+                "سيعيد المقاس المحفوظ قبل تطبيق 16:10 من النسخة الجديدة. إذا كان المنظور قديمًا، استخدم زر استعادة النسخ السابقة.")
+            .setNegativeButton("إلغاء",null)
+            .setPositiveButton("تنفيذ",(d,w)->{
+                if(enable)execute(()->SessionEngine.setPc16by10(getApplicationContext()));
+                else execute(()->SessionEngine.restorePc(getApplicationContext()));
+            })
+            .show();
+    }
+
+    private void confirmLegacyRestore(){
+        new AlertDialog.Builder(this)
+            .setTitle("استعادة إعدادات YRC السابقة")
+            .setMessage("إذا استخدمت Boost من النسخ السابقة، فهذا الإجراء يحاول استعادة ترددات CPU/GPU ودقة العرض والشبكة والإعدادات المحفوظة قبلها. قد يلغي منظور PC قديمًا. نفّذ الإجراء قبل تثبيت نسخة بتوقيع مختلف.")
+            .setNegativeButton("إلغاء",null)
+            .setPositiveButton("استعادة",(d,w)->execute(()->{
+                RootRunner.requireRoot();
+                List<String> messages=SessionManager.restore(getApplicationContext());
+                return android.text.TextUtils.join("\n",messages);
+            }))
+            .show();
+    }
+
+    private void openGamingSettings(){
+        String[] packages={"com.transsion.gamespace.app","com.transsion.gameassistant","com.transsion.xarena"};
+        for(String name:packages){
+            Intent i=getPackageManager().getLaunchIntentForPackage(name);
+            if(i!=null){
+                try{startActivity(i);return;}catch(Exception ignored){}
+            }
+        }
+        try{
+            startActivity(new Intent(Settings.ACTION_DISPLAY_SETTINGS));
+        }catch(Exception e){updateStatus("لم أجد XArena؛ افتحها يدويًا من درج التطبيقات.");}
+    }
+
+    private void launchPubg(){
+        try{
+            Intent i=getPackageManager().getLaunchIntentForPackage(PUBG);
+            if(i==null){updateStatus("لم أجد PUBG Global. افتح إصدارك من قائمة التطبيقات.");return;}
+            startActivity(i);
+        }catch(Exception e){updateStatus("تعذر فتح PUBG: "+e.getMessage());}
+    }
+    interface WorkResult{String run()throws Exception;}
+    private void execute(WorkResult task){
+        updateStatus("جارٍ التنفيذ والتحقق؛ انتظر التقرير…");
+        WORK.execute(()->{
+            String answer;
+            try{answer=task.run();}
+            catch(Exception e){answer="تعذّر الإجراء: "+e.getMessage();}
+            final String done=answer;
+            runOnUiThread(()->updateStatus(done));
+        });
+    }
+    private void updateStatus(String content){
+        lastReport=content;
+        if(status!=null){
+            String first=content.replace('\n',' ');
+            if(first.length()>160)first=first.substring(0,160)+"…";
+            status.setText(first+"\nاضغط لعرض التقرير الكامل");
         }
     }
-
-    private int dp(int v){return Math.round(getResources().getDisplayMetrics().density*v);}
-
-    private void heading(String text){
+    private int dp(int amount){return Math.round(amount*getResources().getDisplayMetrics().density);}
+    private TextView text(String s,int size,int color,boolean bold){
         TextView v=new TextView(this);
-        v.setText(text);
-        v.setTextSize(20);
-        v.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
-        v.setTextColor(TEAL);
-        v.setPadding(0,dp(19),0,dp(8));
-        main.addView(v);
+        v.setText(s);v.setTextColor(color);v.setTextSize(size);
+        v.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG);
+        if(bold)v.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        return v;
     }
-    private void info(String text){
-        TextView v=new TextView(this);
-        v.setText(text);
-        v.setTextSize(14);
-        v.setLineSpacing(dp(3),1f);
-        v.setTextColor(Color.rgb(220,229,237));
-        v.setPadding(dp(3),dp(3),dp(3),dp(9));
-        main.addView(v);
+    private GradientDrawable panel(int fill,int edge){
+        GradientDrawable d=new GradientDrawable();
+        d.setColor(fill);d.setCornerRadius(dp(14));d.setStroke(dp(1),edge);
+        return d;
     }
-    private void action(String label,Runnable click){
+    private void section(String name){
+        TextView h=text(name,19,TEAL,true);
+        h.setPadding(0,dp(22),0,dp(9));
+        body.addView(h);
+    }
+    private void paragraph(String content){
+        TextView p=text(content,14,MUTED,false);
+        p.setLineSpacing(dp(3),1.07f);
+        p.setPadding(dp(2),dp(4),dp(2),dp(14));
+        body.addView(p);
+    }
+    private void primaryButton(String label,Runnable action){button(label,TEAL,Color.rgb(8,26,29),action);}
+    private void secondaryButton(String label,Runnable action){
+        button(label,Color.rgb(38,66,75),TEXT,action);
+    }
+    private void button(String label,int bg,int fg,Runnable action){
         Button b=new Button(this);
-        b.setText(label);
-        b.setTextSize(14);
-        b.setAllCaps(false);
-        b.setTextColor(Color.WHITE);
-        GradientDrawable bg=new GradientDrawable();
-        bg.setColor(label.contains("إرجاع")?Color.rgb(121,72,39):Color.rgb(33,111,106));
-        bg.setCornerRadius(dp(11));
-        b.setBackground(bg);
-        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,dp(51));
-        params.setMargins(0,dp(3),0,dp(7));
-        main.addView(b,params);
-        b.setOnClickListener(v->click.run());
-    }
-    private void message(String text){
-        runOnUiThread(()->{
-            lastReport=text;
-            String first=text.split("\\n",2)[0];
-            if(first.length()>100)first=first.substring(0,100)+"…";
-            status.setText(first+"\nاضغط هنا لقراءة تفاصيل التقرير بالكامل");
-        });
-    }
-    private void background(Runnable task){
-        worker.execute(task);
-    }
-
-    // All rooted modifications target Android display/performance settings only.
-    private String root(String command)throws Exception{
-        java.lang.Process p=new ProcessBuilder("su","-c",command)
-            .redirectErrorStream(true).start();
-        ByteArrayOutputStream buffer=new ByteArrayOutputStream();
-        byte[] bytes=new byte[1024];int n;
-        try(InputStream in=p.getInputStream()){
-            while((n=in.read(bytes))!=-1){
-                if(buffer.size()<8192)
-                    buffer.write(bytes,0,Math.min(n,8192-buffer.size()));
-            }
-        }
-        int code=p.waitFor();
-        String out=buffer.toString("UTF-8").trim();
-        if(code!=0)throw new IOException("رفض أمر النظام ("+code+"): "+out);
-        return out;
-    }
-    private boolean rootReady()throws Exception{
-        String id=root("id -u").trim();
-        if(!"0".equals(id))throw new IOException("لم يتم منح YRC صلاحية Superuser من KernelSU Next");
-        return true;
-    }
-    private int thermalStatus(){
-        PowerManager power=(PowerManager)getSystemService(POWER_SERVICE);
-        return power==null?0:power.getCurrentThermalStatus();
-    }
-    private int batteryTenths(){
-        Intent b=registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
-        return b==null?-1:b.getIntExtra("temperature",-1);
-    }
-    private boolean tooHot(){
-        int temp=batteryTenths();
-        return (temp>=420)||thermalStatus()>=PowerManager.THERMAL_STATUS_SEVERE;
-    }
-    private String prefName(String table,String key){return "clean_original_"+table+"_"+key;}
-    private String readSetting(String table,String key)throws Exception{
-        return root("settings get "+table+" "+key).trim();
-    }
-    private void rememberSetting(String table,String key)throws Exception{
-        String p=prefName(table,key);
-        if(!prefs.contains(p))
-            prefs.edit().putString(p,readSetting(table,key)).commit();
-    }
-    private void changeSetting(String table,String key,String value)throws Exception{
-        rememberSetting(table,key);
-        root("settings put "+table+" "+key+" "+value);
-    }
-    private void undoSetting(String table,String key,List<String> output){
-        String p=prefName(table,key);
-        if(!prefs.contains(p))return;
-        String old=prefs.getString(p,"null");
-        try{
-            if(old==null||old.isEmpty()||"null".equals(old))
-                root("settings delete "+table+" "+key);
-            else if(old.matches("[a-zA-Z0-9_.-]{1,40}"))
-                root("settings put "+table+" "+key+" "+old);
-            else throw new IOException("القيمة القديمة غير صالحة للاستعادة الآمنة");
-            prefs.edit().remove(p).commit();
-            output.add("استعادة "+key+": تمت");
-        }catch(Exception e){output.add("استعادة "+key+": تعذرت ("+e.getMessage()+")");}
-    }
-    private boolean gameInstalled(){
-        try{
-            getPackageManager().getPackageInfo(PUBG,0);
-            return true;
-        }catch(Exception e){return false;}
-    }
-    private void confirmCombatProfile(int percent){
-        if(percent!=90&&percent!=85)return;
-        new AlertDialog.Builder(this)
-            .setTitle("ثبات الاشتباكات — "+percent+"%")
-            .setMessage("لاحظت أن PUBG تتذبذب عندك بين 60 و120FPS أثناء القتال.\n\n"+
-                "سيغيّر YRC إعدادات النظام فعليًا:\n"+
-                "• تقليل أبعاد عرض Android إلى "+percent+"% من المقاس الأصلي، مع الإبقاء على نسبة PC إذا كانت مفعلة.\n"+
-                "• إزالة رفع الحد الأدنى السابق لترددات CPU/GPU بالكامل لتخفيف الحرارة.\n"+
-                "• طلب شاشة 120Hz وإيقاف توفير الطاقة.\n\n"+
-                "الهدف تقليل ضغط الرسم والحرارة؛ لا يمكن ضمان تثبيت 120FPS ولا التحكم في FPS محرك PUBG. قد تظهر أشرطة أو تتغير أماكن اللمس.")
-            .setNegativeButton("إلغاء",null)
-            .setPositiveButton("تطبيق",(d,w)->background(()->applyCombatStability(percent)))
-            .show();
-    }
-
-    private void applyCombatStability(int percent){
-        ArrayList<String> report=new ArrayList<>();
-        report.add("ثبات الاشتباكات "+percent+"% — تعديلات Android الفعلية");
-        try{
-            rootReady();
-            boolean hot=tooHot();
-            KernelBoost kernel=new KernelBoost(prefs);
-            report.addAll(kernel.restore());
-            if(hot)report.add("حرارة الجهاز مرتفعة؛ استعدنا Boost السابق وتركنا التحكم للتبريد الذاتي.");
-            else report.add("CPU/GPU: لا رفع لترددات النواة في هذا الإصدار؛ XOS يتحكم بها.");
-            try{
-                changeSetting("system","tran_refresh_mode","120");
-                changeSetting("system","peak_refresh_rate","120.0");
-                changeSetting("global","low_power","0");
-                report.add("تردد الشاشة: XOS="+readSetting("system","tran_refresh_mode")+
-                    " | أعلى معدل="+readSetting("system","peak_refresh_rate")+
-                    " | حد أدنى تكيفي="+readSetting("system","min_refresh_rate"));
-            }catch(Exception e){
-                report.add("تحديث الشاشة: لم تكتمل جميع الإعدادات "+e.getMessage());
-            }
-            // The target is based on the physical display so repeat presses do not
-            // compound resizing. Honor existing 16:9 / 16:10 aspect preference.
-            try{
-                String[] physical=physicalSize(currentSize()).split("x");
-                int shortOriginal=Math.min(Integer.parseInt(physical[0]),Integer.parseInt(physical[1]));
-                int longOriginal=Math.max(Integer.parseInt(physical[0]),Integer.parseInt(physical[1]));
-                int shortTarget=Math.round(shortOriginal*percent/100f);
-                shortTarget=2*(shortTarget/2);
-                if(shortTarget<800)throw new IOException("الدقة المقترحة صغيرة جدًا");
-                String pc=prefs.getString("clean_pc_ratio","");
-                int longTarget;
-                if("16:9".equals(pc)){
-                    longTarget=(int)Math.round(shortTarget*16.0/9.0);
-                }else if("16:10".equals(pc)){
-                    longTarget=(int)Math.round(shortTarget*16.0/10.0);
-                }else{
-                    longTarget=(int)Math.round(longOriginal*percent/100.0);
-                }
-                longTarget=2*(longTarget/2);
-                if(longTarget<1300)throw new IOException("الارتفاع المقترح صغير جدًا");
-                saveOldSize();
-                String desired=shortTarget+"x"+longTarget;
-                root("wm size "+desired);
-                String actual=currentSize();
-                if(actual.contains("Override size: "+desired)){
-                    report.add("دقة Android: "+desired+" بدل "+shortOriginal+"x"+longOriginal+
-                        ("".equals(pc)?"":" — منظور PC "+pc+" محفوظ."));
-                    report.add("هذه دقة عرض النظام وليست تأكيدًا لتغيّر دقة محرك PUBG الداخلية.");
-                }else{
-                    report.add("أرسلنا أمر الدقة "+desired+" لكن XOS لم يؤكد تطبيقه: "+actual);
-                }
-            }catch(Exception e){
-                report.add("تخفيف عبء العرض لم يكتمل: "+e.getMessage());
-            }
-            report.add("الأفضل من داخل PUBG: Smooth + أعلى FPS رسمي متاح، مع XArena eSports إذا توفر.");
-            report.add("إذا استمر التذبذب إلى 60FPS، قد تكون اللعبة أو XOS تفرض الحد؛ لا يمكن إجبارهما دون تعديل اللعبة.");
-            report.add("بعد اللعب: استخدم زر الاستعادة. وإذا اضطرب العرض، زر «أبعاد الشاشة المصنعية» يعيدها فورًا.");
-        }catch(Exception e){
-            report.add("تعذر تطبيق وضع الاشتباكات: "+e.getMessage());
-            report.add("قد تكون هناك تغييرات جزئية؛ استخدم زر الاستعادة.");
-        }
-        message(android.text.TextUtils.join("\n",report));
-    }
-
-    private void confirmFactoryScreenRestore(){
-        new AlertDialog.Builder(this)
-            .setTitle("إرجاع أبعاد الشاشة المصنعية")
-            .setMessage("يعيد مقاس الشاشة إلى قيمة المصنع عبر Android. يلغي 16:9 و16:10 وتخفيف الدقة فقط، دون مساس بترددات CPU/GPU أو ملفات PUBG. هل تريد الاستعادة؟")
-            .setNegativeButton("إلغاء",null)
-            .setPositiveButton("استعادة",(d,w)->background(this::restoreFactoryScreen))
-            .show();
-    }
-    private void restoreFactoryScreen(){
-        try{
-            rootReady();
-            root("wm size reset");
-            prefs.edit().remove("clean_original_wm").remove("clean_pc_ratio").commit();
-            message("تم طلب إعادة أبعاد الشاشة إلى إعداد المصنع.\n"+currentSize()+
-                "\nإذا ظل العرض غير طبيعي، أعد تشغيل الجهاز. لم تُعدّل ملفات PUBG.");
-        }catch(Exception e){message("فشل إرجاع دقة المصنع: "+e.getMessage());}
-    }
-
-    private void applyFpsProfile(){
-        try{
-            rootReady();
-            if(tooHot()){
-                message("الحرارة مرتفعة؛ لم يتم تغيير أداء الشاشة. انتظر حتى تبرد البطارية ولا تعطّل الحماية الحرارية.");
-                return;
-            }
-            ArrayList<String> output=new ArrayList<>();
-            changeSetting("system","tran_refresh_mode","120");
-            changeSetting("system","peak_refresh_rate","120.0");
-            changeSetting("global","low_power","0");
-            // XOS can legitimately keep an adaptive floor at 60Hz. Do not fight it.
-            if(prefs.contains(prefName("system","min_refresh_rate"))){
-                undoSetting("system","min_refresh_rate",output);
-            }
-            output.add("تم طلب تردد 120Hz وتعطيل توفير الطاقة.");
-            if(gameInstalled()){
-                if(prefs.getBoolean("clean_game_mode_unavailable",false)){
-                    output.add("Game Mode: الجهاز سبق أن رفض هذا الأمر لـ PUBG؛ تجاهلناه.");
-                }else{
-                    try{
-                        String res=root("cmd game mode 2 "+PUBG);
-                        String lower=res.toLowerCase(Locale.US);
-                        if(lower.contains("not supported")||lower.contains("error")||
-                            lower.contains("unknown")||lower.contains("255")){
-                            prefs.edit().putBoolean("clean_game_mode_unavailable",true).apply();
-                            output.add("Game Mode غير مدعوم للعبة، تم إيقاف تكرار المحاولة.");
-                        }else{
-                            prefs.edit().putBoolean("clean_requested_game_mode",true).apply();
-                            output.add("Game Mode: تم إرسال طلب Performance.");
-                        }
-                    }catch(Exception e){
-                        String error=String.valueOf(e.getMessage());
-                        if(error.toLowerCase(Locale.US).contains("not supported")){
-                            prefs.edit().putBoolean("clean_game_mode_unavailable",true).apply();
-                            output.add("Game Mode غير مدعوم من PUBG/XOS؛ سيتم تجاهل الأمر من الآن.");
-                        }else{
-                            output.add("Game Mode: تعذر تطبيقه، بدون تأثير على إعداد الشاشة. "+error);
-                        }
-                    }
-                }
-            }
-            String mode=readSetting("system","tran_refresh_mode");
-            String peak=readSetting("system","peak_refresh_rate");
-            String min=readSetting("system","min_refresh_rate");
-            output.add("الفحص الفعلي بعد الطلب:");
-            output.add("XOS="+mode+" | peak="+peak+"Hz | min="+min+"Hz");
-            if(!"120".equals(mode)||!"120.0".equals(peak)){
-                output.add("تنبيه: لم يحتفظ XOS بجميع القيم المطلوبة؛ قد يتولى النظام التحكم بالتحديث.");
-            }
-            output.add("min=60Hz قد يكون طبيعيًا في الوضع التكيفي، ولا يعني أن اللعبة تعمل 60FPS.");
-            output.add("اضبط PUBG رسميًا على Smooth + 120FPS إن كان الخيار متاحًا.");
-            output.add("هذه القيم ليست قياسًا لعدد FPS الحقيقي أثناء اللعب.");
-            message(android.text.TextUtils.join("\n",output));
-        }catch(Exception e){
-            message("تعذر تطبيق ملف 120Hz: "+e.getMessage()+
-                "\nيمكنك استخدام زر الاستعادة لإرجاع إعدادات النظام المحفوظة.");
-        }
-    }
-    private void checkFpsProfile(){
-        try{
-            rootReady();
-            String[] keys={"tran_refresh_mode","peak_refresh_rate","min_refresh_rate"};
-            StringBuilder sb=new StringBuilder("وضع الشاشة والنظام:\n");
-            for(String key:keys){
-                sb.append(key).append(": ").append(readSetting("system",key)).append("\n");
-            }
-            sb.append("Low Power: ").append(readSetting("global","low_power")).append("\n");
-            int temp=batteryTenths();
-            if(temp>=0)sb.append("حرارة البطارية: ")
-                .append(String.format(Locale.US,"%.1f",temp/10.0)).append("°C\n");
-            sb.append("Thermal status: ").append(thermalStatus()).append("\n");
-            sb.append("الحد الأدنى 60Hz قد يكون XOS Adaptive Refresh Rate؛ هذا لا يثبت 60FPS داخل PUBG.\n");
-            sb.append("120Hz هو معدل تحديث الشاشة، وليس قياس FPS الفعلي. افحص عداد الفريمات أثناء اللعب.");
-            message(sb.toString());
-        }catch(Exception e){message("تعذر قراءة إعدادات الفريمات: "+e.getMessage());}
-    }
-
-    private String currentSize()throws Exception{
-        return root("wm size").trim();
-    }
-    private String physicalSize(String output)throws Exception{
-        java.util.regex.Matcher m=java.util.regex.Pattern
-            .compile("Physical size:\\s*(\\d+)x(\\d+)").matcher(output);
-        if(!m.find())throw new IOException("تعذر معرفة المقاس الأصلي: "+output);
-        return m.group(1)+"x"+m.group(2);
-    }
-    private void saveOldSize()throws Exception{
-        if(!prefs.contains("clean_original_wm"))
-            prefs.edit().putString("clean_original_wm",currentSize()).commit();
-    }
-    private void setRelativeScreen(int percent,boolean pcView){
-        try{
-            rootReady();
-            if(tooHot()&&percent==100){
-                message("الحرارة مرتفعة؛ تقليل الحمل أولًا أفضل من رفع الدقة.");
-                return;
-            }
-            String[] physical=physicalSize(currentSize()).split("x");
-            int w=Integer.parseInt(physical[0]),h=Integer.parseInt(physical[1]);
-            int shortSide=Math.min(w,h);
-            int longSide=Math.max(w,h);
-            if(pcView)longSide=(int)Math.round(shortSide*16.0/9.0);
-            else{
-                shortSide=(int)Math.round(shortSide*percent/100.0);
-                longSide=(int)Math.round(longSide*percent/100.0);
-            }
-            shortSide=Math.max(480,shortSide-(shortSide%2));
-            longSide=Math.max(800,longSide-(longSide%2));
-            saveOldSize();
-            root("wm size "+shortSide+"x"+longSide);
-            message((pcView?"تم طلب عرض 16:9 شبيه بالكمبيوتر. ":
-                "تم طلب دقة عرض "+percent+"% من الشاشة الأصلية. ")+
-                "\n"+currentSize()+"\nهذه دقة نظام Android وليست جودة خامات PUBG. "+
-                "إذا تغير لمس الشاشة أو ظهرت أشرطة، استخدم زر الاستعادة.");
-        }catch(Exception e){message("تعذر تغيير دقة العرض: "+e.getMessage());}
-    }
-    private void applyResolution(int percent){
-        if(percent!=95&&percent!=100){
-            message("ملف دقة غير معروف.");return;
-        }
-        prefs.edit().remove("clean_pc_ratio").commit();
-        setRelativeScreen(percent,false);
-    }
-    private void confirmPcCompact(){
-        new AlertDialog.Builder(this)
-            .setTitle("منظور PC 16:10 — تجربة")
-            .setMessage("هذا الخيار يقلّل مساحة عرض Android أكثر من 16:9، وقد يغيّر طريقة عرض اللاعب لكن لا يغيّر بعد الكاميرا أو FOV داخل PUBG. إذا ظهرت أشرطة أو تغير اللمس، اضغط استعادة. هل تريد التجربة؟")
-            .setNegativeButton("إلغاء",null)
-            .setPositiveButton("تفعيل",(d,w)->background(()->applyPcAspect(16,10)))
-            .show();
-    }
-    private void applyPcAspect(int width,int height){
-        try{
-            if(width!=16||(height!=9&&height!=10))throw new IOException("Unsupported PC aspect");
-            rootReady();
-            String[] physical=physicalSize(currentSize()).split("x");
-            int shortest=Math.min(Integer.parseInt(physical[0]),Integer.parseInt(physical[1]));
-            int longest=(int)Math.round(shortest*width/(double)height);
-            longest-=longest%2;
-            saveOldSize();
-            root("wm size "+shortest+"x"+longest);
-            prefs.edit().putString("clean_pc_ratio","16:"+height).commit();
-            message("تم تغيير شاشة Android إلى PC "+width+":"+height+
-                " ("+shortest+"x"+longest+").\nقد تظهر أشرطة أو يتغير حجم اللاعب، ولا يمكن ضمان إظهار الجسم كاملًا لأن زاوية كاميرا PUBG لا تتغير.\n"+
-                "من داخل اللعبة اختر أقصى TPP Camera View رسميًا. للاستعادة اضغط زر إيقاف BOOST.");
-        }catch(Exception e){message("تعذر تطبيق شاشة PC: "+e.getMessage());}
-    }
-
-    private void confirmPcRatio(){
-        new AlertDialog.Builder(this)
-            .setTitle("تجربة عرض 16:9")
-            .setMessage("يغيّر نسبة أبعاد شاشة Android مؤقتًا ولا يفتح FOV حقيقيًا داخل اللعبة. قد يظهر شريط أسود أو تتغير أماكن أزرار اللمس. هل تريد التطبيق؟")
-            .setNegativeButton("إلغاء",null)
-            .setPositiveButton("تطبيق",(d,w)->background(()->applyPcAspect(16,9)))
-            .show();
-    }
-    private void showGraphicsGuide(){
-        new AlertDialog.Builder(this)
-            .setTitle("تحسين الرسومات دون ملفات خارجية")
-            .setMessage("لأعلى ثبات قريب من تجربة 119FPS:\n\n"+
-                "1. داخل PUBG > Graphics: اختر Smooth مع أعلى Frame Rate رسمي متاح حتى 120FPS.\n"+
-                "2. اضبط Auto-adjust Graphics على Off إن كان الخيار متاحًا.\n"+
-                "3. لجودة صور أعلى، ارفع مستوى Graphics رسميًا خطوة بخطوة، لكن قد يختفي خيار 120FPS وتنخفض الفريمات.\n"+
-                "4. زر «وضوح أصلي 100%» يستخدم دقة شاشة Android الأصلية ولا يغيّر خامات اللعبة.")
-            .setNegativeButton("إغلاق",null)
-            .setPositiveButton("فتح PUBG",(d,w)->launchGame())
-            .show();
-    }
-    private void showTppGuide(){
-        new AlertDialog.Builder(this).setTitle("منظور TPP الواسع")
-            .setMessage("افتح PUBG > Settings، وابحث عن TPP Camera View / زاوية كاميرا الشخص الثالث إن توفر في إصدارك، وارفعه لأعلى قيمة رسمية.\n\n"+
-                "خيار 16:9 يغيّر أبعاد العرض فقط؛ لا يوسّع مجال الرؤية الحقيقي ولا يحوّل اللعبة إلى PC.")
-            .setNegativeButton("إغلاق",null)
-            .setPositiveButton("فتح اللعبة",(d,w)->launchGame())
-            .show();
-    }
-
-    private void confirmHitAssist(){
-        new AlertDialog.Builder(this)
-            .setTitle("تقليل الدمج الوهمي — اتصال منخفض التأخير")
-            .setMessage("إذا كنت تقصد إصابة الرصاص دون احتساب الضرر، فهذا مرتبط أيضًا بالسيرفر والمزامنة ولا يوجد حل مضمون من الهاتف.\n\n"+
-                "الزر سيغيّر إعدادات الشبكة فعليًا عند دعمها:\n"+
-                "1. تفعيل Wi-Fi Low Latency من Android.\n"+
-                "2. إيقاف توفير طاقة Wi-Fi من التعريف إذا كان أمر iw مدعومًا.\n"+
-                "3. حفظ الحالة السابقة لاستعادتها.\n\n"+
-                "لن يغيّر أي ملف داخل PUBG. قد يزيد استهلاك البطارية. يتطلب الاتصال بشبكة Wi-Fi.")
-            .setNegativeButton("إلغاء",null)
-            .setPositiveButton("تطبيق التحسين",(d,w)->background(this::applyHitAssist))
-            .show();
-    }
-
-    private void applyHitAssist(){
-        try{
-            rootReady();
-            ConnectivityManager cm=(ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
-            Network wifi=cm==null?null:cm.getActiveNetwork();
-            NetworkCapabilities caps=wifi==null||cm==null?null:cm.getNetworkCapabilities(wifi);
-            if(caps==null||!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)){
-                message("تقليل الدمج الوهمي: الاتصال الحالي ليس Wi-Fi. لا تغييرات؛ هذا الوضع خاص بشبكة Wi-Fi ولا يصلح إصابات السيرفر.");
-                return;
-            }
-            android.net.LinkProperties lp=cm.getLinkProperties(wifi);
-            String iface=lp==null?"":lp.getInterfaceName();
-            ArrayList<String> report=new ArrayList<>();
-            report.add("تم تنفيذ أوامر تقليل تأخير اتصال Wi-Fi حيث يدعمها النظام:");
-            report.addAll(new NetworkAssist(prefs).enable(iface));
-            report.add("نتيجة الاتصال قد تختلف داخل PUBG؛ لا ضمان لحل الدمج الوهمي من الهاتف.");
-            message(android.text.TextUtils.join("\n",report));
-        }catch(Exception e){
-            message("تعذّر تنفيذ تحسين الاتصال: "+e.getMessage()+
-                "\nلم نغيّر بيانات PUBG. استخدم زر الاستعادة إذا طُبّق جزء من الإعدادات.");
-        }
-    }
-
-    private void restoreHitAssist(){
-        try{
-            rootReady();
-            List<String> result=new NetworkAssist(prefs).restore();
-            message(android.text.TextUtils.join("\n",result));
-        }catch(Exception e){message("تعذرت استعادة اتصال Wi-Fi: "+e.getMessage());}
-    }
-
-    private void checkNetwork(){
-        try{
-            ConnectivityManager cm=(ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
-            if(cm==null){message("خدمة الشبكة غير متاحة.");return;}
-            Network network=cm.getActiveNetwork();
-            NetworkCapabilities caps=network==null?null:cm.getNetworkCapabilities(network);
-            if(caps==null){message("ليس هناك اتصال نشط بالإنترنت.");return;}
-            String access=caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)?"Wi-Fi":
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)?"Mobile Data":"Other";
-            message("جاري قياس الاتصال "+access+" إلى نقطة اختبار عامة، وليس سيرفر PUBG...");
-            int attempts=10,ok=0;double sum=0,maximum=0,jitter=0,last=-1;
-            for(int i=0;i<attempts;i++){
-                try(Socket socket=new Socket()){
-                    long t=System.nanoTime();
-                    socket.connect(new InetSocketAddress("1.1.1.1",443),1500);
-                    double ms=(System.nanoTime()-t)/1_000_000.0;
-                    sum+=ms;maximum=Math.max(maximum,ms);
-                    if(last>=0)jitter+=Math.abs(ms-last);
-                    last=ms;ok++;
-                }catch(Exception ignored){}
-                if(i<attempts-1)Thread.sleep(100);
-            }
-            if(ok==0){
-                message("لم ينجح اتصال TCP مع نقطة الاختبار. قد يكون العنوان محجوبًا؛ لا يثبت وجود مشكلة في PUBG.");
-                return;
-            }
-            double average=sum/ok;
-            double approxJitter=ok>1?jitter/(ok-1):0;
-            int failed=attempts-ok;
-            String report=String.format(Locale.US,
-                "الاتصال: %s\nنجاح TCP: %d/%d | فشل: %d\nمتوسط التأخير: %.1f ms\nأعلى تأخير: %.1f ms\nالتذبذب التقريبي: %.1f ms\n",
-                access,ok,attempts,failed,average,maximum,approxJitter);
-            report+="\nاختبار اتصال TCP إلى 1.1.1.1 وليس Ping سيرفر PUBG. "+
-                "لتحسين الثبات استخدم Wi-Fi 5GHz قويًا، أوقف التحميلات وابتعد عن VPN غير الضروري.";
-            message(report);
-        }catch(Exception e){message("تعذر اختبار ثبات الشبكة: "+e.getMessage());}
-    }
-
-    private void confirmRestore(){
-        new AlertDialog.Builder(this)
-            .setTitle("استعادة إعدادات النظام")
-            .setMessage("سيحاول إرجاع الحد الأدنى الأصلي لتردد CPU/GPU، ودقة Android، وتحديث الشاشة، وتوفير الطاقة، وWi-Fi Low Latency. لا يلمس PUBG. بعض قيم النواة قد تعود تلقائيًا بعد إعادة التشغيل. هل تريد الاستعادة؟")
-            .setNegativeButton("إلغاء",null)
-            .setPositiveButton("استعادة",(d,w)->background(this::restoreAll))
-            .show();
-    }
-    private void restoreAll(){
-        try{
-            rootReady();
-            ArrayList<String> out=new ArrayList<>();
-            out.addAll(new KernelBoost(prefs).restore());
-            String original=prefs.getString("clean_original_wm",null);
-            if(original!=null){
-                try{
-                    java.util.regex.Matcher m=java.util.regex.Pattern
-                        .compile("Override size:\\s*(\\d+x\\d+)").matcher(original);
-                    if(m.find())root("wm size "+m.group(1));
-                    else root("wm size reset");
-                    prefs.edit().remove("clean_original_wm").remove("clean_pc_ratio").commit();
-                    out.add("مقاس شاشة Android: تم استعادته.");
-                }catch(Exception e){out.add("فشل استعادة المقاس: "+e.getMessage());}
-            }
-            undoSetting("system","tran_refresh_mode",out);
-            undoSetting("system","peak_refresh_rate",out);
-            undoSetting("system","min_refresh_rate",out);
-            undoSetting("global","low_power",out);
-            out.addAll(new NetworkAssist(prefs).restore());
-            if(prefs.getBoolean("clean_requested_game_mode",false)&&gameInstalled()){
-                try{
-                    root("cmd game mode 1 "+PUBG);
-                    prefs.edit().remove("clean_requested_game_mode").commit();
-                    out.add("Game Mode: تم طلب Standard.");
-                }catch(Exception e){out.add("تعذرت استعادة Game Mode: "+e.getMessage());}
-            }
-            if(out.isEmpty())out.add("لا توجد إعدادات محفوظة لتغييرها.");
-            out.add("ملفات PUBG لم تُفتح أو تُعدّل.");
-            message(android.text.TextUtils.join("\n",out));
-        }catch(Exception e){message("تعذرت الاستعادة: "+e.getMessage());}
-    }
-    private void launchGame(){
-        if(!gameInstalled()){
-            message("PUBG Mobile Global غير مثبتة أو غير مرئية لهذا التطبيق.");
-            return;
-        }
-        Intent start=getPackageManager().getLaunchIntentForPackage(PUBG);
-        try{
-            if(start!=null)startActivity(start);
-            else message("لم أجد نشاط تشغيل PUBG.");
-        }catch(Exception e){message("تعذر تشغيل PUBG: "+e.getMessage());}
-    }
-    @Override protected void onDestroy(){
-        worker.shutdownNow();
-        super.onDestroy();
+        b.setText(label);b.setAllCaps(false);b.setTextSize(15);
+        b.setTextColor(fg);b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        GradientDrawable drawable=new GradientDrawable();
+        drawable.setColor(bg);drawable.setCornerRadius(dp(13));
+        b.setBackground(drawable);
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,dp(56));
+        params.setMargins(0,dp(4),0,dp(8));
+        body.addView(b,params);
+        b.setOnClickListener(v->action.run());
     }
 }
