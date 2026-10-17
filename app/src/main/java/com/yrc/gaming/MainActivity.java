@@ -141,7 +141,7 @@ public class MainActivity extends Activity {
     }
     try{
       String mode=(profile==103?"standard":"performance");
-      root("cmd game mode "+mode+" "+game);
+      root("cmd game mode "+(profile==103?"1":"2")+" "+game);
       result.add("وضع اللعبة: "+(profile==103?"قياسي":"أداء")+" (طلب للنظام)");
     }catch(Exception e){result.add("وضع اللعبة غير مدعوم: "+e.getMessage());}
     if(profile!=103){
@@ -244,9 +244,9 @@ public class MainActivity extends Activity {
     catch(Exception e){logs.add("144Hz: رفض XOS الطلب");}
     try{setSetting("system","min_refresh_rate","120.0");logs.add("الحد الأدنى: قُبلت القيمة في الإعدادات");}
     catch(Exception e){logs.add("الحد الأدنى: رفض XOS الطلب");}
-    try{String out=root("cmd game mode performance "+game);logs.add(looksLikeHelp(out)?"Game Mode: غير مدعوم":"Game Mode: أُرسل طلب الأداء");}
+    try{String out=root("cmd game mode 2 "+game);logs.add(looksLikeHelp(out)?"Game Mode: غير مدعوم":"Game Mode: أُرسل طلب الأداء");}
     catch(Exception e){logs.add("Game Mode: تعذر التفعيل");}
-    try{String out=root("cmd game set --mode performance --fps 120 "+game);logs.add(looksLikeHelp(out)?"120FPS: الأمر غير مدعوم":"120FPS: أُرسل الطلب للنظام");}
+    try{String out=root("cmd game set --mode 2 --fps 120 "+game);logs.add(looksLikeHelp(out)?"120FPS: الأمر غير مدعوم":"120FPS: أُرسل الطلب للنظام");}
     catch(Exception e){logs.add("120FPS: تعذر إرسال الطلب");}
     prefs.edit().putBoolean("strong_mode",true).commit();
     message(android.text.TextUtils.join(String.valueOf((char)10),logs)+"\nهذه طلبات للنظام، وليست قراءة FPS الفعلية.");
@@ -286,14 +286,14 @@ public class MainActivity extends Activity {
   private void requestGameFps(int fps){
     String game=pkg();if(game==null){message("لم يتم العثور على ببجي");return;}
     try{
-      String out=root("cmd game set --mode performance --fps "+fps+" "+game);
+      String out=root("cmd game set --mode 2 --fps "+fps+" "+game);
       if(looksLikeHelp(out)){message("أمر FPS غير مدعوم على هذا الإصدار؛ لم يتم تأكيد تطبيقه.");return;}
       String config=root("cmd game list-configs "+game);
       message("تم إرسال طلب "+fps+"FPS إلى Game Mode.\n"+brief(config)+"\nهذا ليس قياس FPS داخل اللعبة، وقد تتجاهل ببجي الطلب.");
     }catch(Exception e){message("فشل طلب FPS: "+e.getMessage());}
   }
   private boolean looksLikeHelp(String out){
-    return out!=null&&(out.contains("Intervention configs consists of")||out.contains("Set app to run in the specified game mode")||out.contains("Usage:")||out.contains("Unknown option"));
+    return out!=null&&(out.contains("NumberFormatException")||out.contains("Exception")||out.contains("Error:")||out.contains("Intervention configs consists of")||out.contains("Set app to run in the specified game mode")||out.contains("Usage:")||out.contains("Unknown option"));
   }
   private String brief(String out){
     if(out==null)return "";
@@ -304,7 +304,7 @@ public class MainActivity extends Activity {
     if(game==null){message("لم يتم العثور على ببجي");return;}
     try{
       root("id");
-      String result=root("cmd game set --mode performance --downscale 0.9 "+game);
+      String result=root("cmd game set --mode 2 --downscale 0.9 "+game);
       if(looksLikeHelp(result)){message("رفض XOS أمر تخفيف الرسم؛ لم يتم تأكيد التعديل.");return;}
       String modes=root("cmd game list-configs "+game);
       message("أُرسل طلب الرسم 90%.\n"+brief(modes)+"\nأعد تشغيل ببجي. لا يمكن تأكيد تطبيقه إلا بقياس فعلي.");
@@ -312,7 +312,7 @@ public class MainActivity extends Activity {
   }
   private void resetDownscale(){
     String game=pkg();if(game==null){message("لم يتم العثور على ببجي");return;}
-    try{root("cmd game reset --mode performance "+game);message("تم إرسال أمر استعادة إعدادات رسم اللعبة الافتراضية. أعد تشغيل ببجي.");}
+    try{root("cmd game reset --mode 2 "+game);message("تم إرسال أمر استعادة إعدادات رسم اللعبة الافتراضية. أعد تشغيل ببجي.");}
     catch(Exception e){message("تعذرت الاستعادة: "+e.getMessage());}
   }
   private void showPcViewGuide(){
@@ -341,7 +341,7 @@ public class MainActivity extends Activity {
       }catch(Exception e){result.add(key+": فشلت الاستعادة: "+e.getMessage());}
     }
     String game=pkg();
-    if(game!=null)try{root("cmd game mode standard "+game);result.add("وضع اللعبة: قياسي");}catch(Exception e){result.add("تعذرت استعادة وضع اللعبة");}
+    if(game!=null)try{root("cmd game mode 1 "+game);result.add("وضع اللعبة: قياسي");}catch(Exception e){result.add("تعذرت استعادة وضع اللعبة");}
     try{root("cmd power set-fixed-performance-mode-enabled false");prefs.edit().putBoolean("fixed",false).commit();result.add("وضع الأداء الثابت: متوقف");}catch(Exception e){result.add("تعذر إيقاف وضع الأداء الثابت");}
     runOnUiThread(()->getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON));
     message(android.text.TextUtils.join("\n",result));
