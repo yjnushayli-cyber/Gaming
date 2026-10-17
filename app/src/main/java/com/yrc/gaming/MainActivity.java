@@ -464,10 +464,13 @@ public class MainActivity extends Activity {
       .setPositiveButton("تطبيق",(d,w)->run(()->applyIniQuality(scale))).show();
   }
   private void applyIniQuality(String scale){
+    String stage="بدء التنفيذ";
     try{
       if(!java.util.Arrays.asList("1.1","1.15","1.25").contains(scale)){message("مستوى غير مدعوم");return;}
+      stage="فحص الروت";
       root("id");
       if(!root("pidof com.tencent.ig 2>/dev/null || true").trim().isEmpty()){message("أغلق PUBG بالكامل أولًا.");return;}
+      stage="قراءة الملف";
       String path=pubgIniPath(),backup=iniBackupPath();
       String original=new String(android.util.Base64.decode(root("base64 '"+path+"'"),android.util.Base64.DEFAULT),java.nio.charset.StandardCharsets.UTF_8);
       if(original.length()<100||original.length()>60000){message("تعذر قراءة الملف بأمان.");return;}
@@ -493,15 +496,24 @@ public class MainActivity extends Activity {
       String edited=android.text.TextUtils.join("\n",java.util.Arrays.asList(lines));
       String encoded=android.util.Base64.encodeToString(edited.getBytes(java.nio.charset.StandardCharsets.UTF_8),android.util.Base64.NO_WRAP);
       String temp="/data/local/tmp/yrc_pubg_render_temp.ini";
-      // First backup stays immutable across repeated preset changes.
-      if(!root("test -f '"+backup+"' && echo EXISTS").contains("EXISTS")){
-        root("cp -p '"+path+"' '"+backup+"'");
+      // Handle an absent backup as a normal first run (without shell exit code 1).
+      stage="النسخة الاحتياطية";
+      String backupState=root("if [ ! -e '"+backup+"' ]; then echo MISSING; elif [ -s '"+backup+"' ]; then echo READY; else echo EMPTY; fi");
+      if("EMPTY".equals(backupState)){message("النسخة الاحتياطية الموجودة فارغة؛ لم نكتب داخل PUBG.");return;}
+      if("MISSING".equals(backupState)){
+        stage="إنشاء نسخة احتياطية";
+        root("cp '"+path+"' '"+backup+"'");
       }
-      if(!root("test -s '"+backup+"' && echo OK").contains("OK")){message("تعذر حفظ النسخة الاحتياطية، لم نكتب إلى اللعبة.");return;}
+      if(!"READY".equals(root("if [ -s '"+backup+"' ]; then echo READY; else echo MISSING; fi"))){
+        message("تعذر إنشاء نسخة احتياطية سليمة؛ لم نكتب داخل PUBG.");return;
+      }
+      stage="تحضير التعديل";
       root("printf '%s' '"+encoded+"' | base64 -d > '"+temp+"'");
       String tempHash=root("sha256sum '"+temp+"'").trim();
       if(!tempHash.matches("(?s)^[0-9a-f]{64}.*")){message("فشل تجهيز ملف الجودة، لم نكتب إلى اللعبة.");return;}
+      stage="كتابة الملف";
       root("cat '"+temp+"' > '"+path+"'");
+      stage="التحقق من التعديل";
       String actual=root("sha256sum '"+path+"'").trim();
       if(!actual.substring(0,64).equals(tempHash.substring(0,64))){
         root("cat '"+backup+"' > '"+path+"'");
@@ -509,14 +521,14 @@ public class MainActivity extends Activity {
       }
       root("rm -f '"+temp+"'");
       message("تمت كتابة قيمة الرندر "+scale+" والتحقق من الملف. نسخة الاستعادة: "+backup+"\nالحد الرسمي 120FPS لم يتغير. جرّب FPS وجودة الصورة؛ قد تتجاهل اللعبة القيمة.");
-    }catch(Exception e){message("تعذر تعديل رسومات PUBG: "+e.getMessage());}
+    }catch(Exception e){message("تعذر تعديل PUBG عند «"+stage+"»: "+e.getMessage());}
   }
   private void restoreIniClarity(){
     try{
       root("id");
       if(!root("pidof com.tencent.ig 2>/dev/null || true").trim().isEmpty()){message("أغلق PUBG بالكامل قبل الاستعادة.");return;}
       String backup=iniBackupPath(),path=pubgIniPath();
-      if(!root("test -f '"+backup+"' && echo EXISTS").contains("EXISTS")){message("لا توجد نسخة احتياطية لهذا التعديل.");return;}
+      if(!"READY".equals(root("if [ -s '"+backup+"' ]; then echo READY; else echo MISSING; fi"))){message("لا توجد نسخة احتياطية صالحة للاستعادة.");return;}
       root("cat '"+backup+"' > '"+path+"'");
       String a=root("sha256sum '"+backup+"'").trim().split(" ")[0];
       String b=root("sha256sum '"+path+"'").trim().split(" ")[0];
