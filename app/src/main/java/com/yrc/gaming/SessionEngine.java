@@ -129,7 +129,10 @@ final class SessionEngine {
             }
 
             if(!p.edit().putBoolean(ACTIVE,true)
-                .putInt("v6_render_percent",renderPercent).commit())
+                .putInt("v6_render_percent",renderPercent)
+                .putInt("v6_samples_110plus",0)
+                .putInt("v6_samples_60",0)
+                .putInt("v6_samples_other",0).commit())
                 throw new IOException("Cannot save recovery marker");
 
             int confirmed=0;
@@ -244,7 +247,12 @@ final class SessionEngine {
         ArrayList<String> notes=new ArrayList<>();
         notes.add("YRC — تشخيص الشاشة خارج PUBG");
         notes.add("يدعم الهاتف 120Hz: "+(supports120(ctx)?"نعم":"لا يظهر"));
-        notes.add("درجة البطارية: "+(batteryTempTenths(ctx)/10.0)+"°C");
+        int battery=batteryTempTenths(ctx);
+        notes.add("درجة البطارية: "+(battery<0?"غير متاحة":(battery/10.0)+"°C"));
+        notes.add("عينات العرض أثناء آخر جلسة PUBG: 110Hz فأعلى="+prefs(ctx).getInt("v6_samples_110plus",0)+
+            " | حول 60Hz="+prefs(ctx).getInt("v6_samples_60",0)+
+            " | أخرى="+prefs(ctx).getInt("v6_samples_other",0)+
+            " (وضع الشاشة وليس FPS اللعبة).");
         try{
             DisplayManager dm=(DisplayManager)ctx.getSystemService(Context.DISPLAY_SERVICE);
             Display d=dm==null?null:dm.getDisplay(Display.DEFAULT_DISPLAY);
