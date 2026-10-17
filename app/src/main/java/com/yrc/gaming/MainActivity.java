@@ -90,6 +90,8 @@ public class MainActivity extends Activity {
     title("تحليل رسومات PUBG 4.6.0");
     label("قراءة فقط لملف UserCustom.ini وفك CVars دون تعديل ملفات اللعبة.");
     button("تحليل إعدادات PUBG 4.6.0",()->run(()->analyzePubgConfig()));
+    button("ربط مسار رسومات وفريمات PUBG والتحقق منه",()->run(()->verifyGraphicsPath()));
+    button("نسخ مسار ملف الرسومات",()->copyGraphicsPath());
     button("نسخ ملف PUBG الأصلي احتياطيًا (روت)",()->run(()->backupPubgConfig()));
     button("تجهيز معاينة رسومات PUBG التجريبية",()->run(()->previewPubgGraphics()));
     title("التحكم");
@@ -485,6 +487,25 @@ public class MainActivity extends Activity {
     try{root("cmd power set-fixed-performance-mode-enabled false");}catch(Exception ignored){}
     prefs.edit().putBoolean("strong_mode",false).commit();
     message(android.text.TextUtils.join(String.valueOf((char)10),logs));
+  }
+  private void verifyGraphicsPath(){
+    String path=pubgIniPath();
+    try{
+      root("id");
+      String info=root("if [ -f '"+path+"' ]; then wc -c < '"+path+"'; sha256sum '"+path+"'; else echo MISSING; fi");
+      if(info.contains("MISSING")){message("ملف الرسومات غير موجود في المسار المتوقع:\\n"+path);return;}
+      String[] lines=info.split("\\n");
+      prefs.edit().putString("pubg_graphics_path",path).commit();
+      message("تم ربط مسار رسومات PUBG 4.6.0 والتحقق من وجوده:\\n"+path+
+        "\\nالحجم: "+lines[0].trim()+" بايت\\nSHA256: "+(lines.length>1?lines[1].trim().split(" ")[0]:"غير متاح")+
+        "\\nالربط للقراءة والنسخ الاحتياطي فقط؛ أزرار تحسين الشاشة لا تكتب تلقائيًا داخل ملف اللعبة.");
+    }catch(Exception e){message("تعذر التحقق من مسار الرسومات: "+e.getMessage());}
+  }
+  private void copyGraphicsPath(){
+    String path=prefs.getString("pubg_graphics_path",pubgIniPath());
+    android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+    cm.setPrimaryClip(android.content.ClipData.newPlainText("PUBG graphics path",path));
+    message("تم نسخ مسار الرسومات:\\n"+path);
   }
   private String pubgIniPath(){
     return "/sdcard/Android/data/com.tencent.ig/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/Config/Android/UserCustom.ini";
